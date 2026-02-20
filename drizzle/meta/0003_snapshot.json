@@ -1,6 +1,6 @@
 {
-  "id": "ad0da17f-227d-48eb-8cf4-76d23d808f11",
-  "prevId": "00000000-0000-0000-0000-000000000000",
+  "id": "d47c6109-0d5c-4df9-9fd2-875146ed4dc9",
+  "prevId": "ad0da17f-227d-48eb-8cf4-76d23d808f11",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -230,6 +230,13 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
+        },
+        "role": {
+          "name": "role",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'user'"
         },
         "created_at": {
           "name": "created_at",
@@ -1513,7 +1520,50 @@
       "isRLSEnabled": false
     }
   },
-  "enums": {},
+  "enums": {
+    "public.plan_type": {
+      "name": "plan_type",
+      "schema": "public",
+      "values": [
+        "free",
+        "trial",
+        "expired"
+      ]
+    },
+    "public.session_status": {
+      "name": "session_status",
+      "schema": "public",
+      "values": [
+        "active",
+        "closed"
+      ]
+    },
+    "public.difficulty_level": {
+      "name": "difficulty_level",
+      "schema": "public",
+      "values": [
+        "beginner",
+        "intermediate",
+        "advanced"
+      ]
+    },
+    "public.favorite_type": {
+      "name": "favorite_type",
+      "schema": "public",
+      "values": [
+        "vocabulary",
+        "quiz"
+      ]
+    },
+    "public.practice_type": {
+      "name": "practice_type",
+      "schema": "public",
+      "values": [
+        "speaking",
+        "listening"
+      ]
+    }
+  },
   "schemas": {},
   "sequences": {},
   "roles": {},

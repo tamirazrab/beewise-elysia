@@ -106,12 +106,24 @@ export const voiceChatModule = withAuth(new Elysia({ prefix: '/api/voice' }))
 		{
 			auth: true,
 			body: t.Object({
-				language_code: t.Optional(t.String()),
+				language_code: t.Optional(
+					t.String({
+						description: 'Optional ISO 639-1 language code (default: en)',
+						default: 'fr',
+					}),
+				),
 			}),
 			detail: {
 				tags: ['Voice Chat'],
 				summary: 'Start voice session',
-				description: 'Start a bidirectional voice chat session (streaming not yet implemented)',
+				description: 'Authenticated. Start a voice chat session. Optional body prefilled with example. Streaming not yet implemented.',
+				requestBody: {
+					content: {
+						'application/json': {
+							example: { language_code: 'fr' },
+						},
+					},
+				},
 			},
 		},
 	);

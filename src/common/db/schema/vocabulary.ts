@@ -5,9 +5,9 @@ import { user } from './auth';
  * Vocabulary tables - items, progress, practice sessions, quizzes, favorites
  */
 
-const difficultyLevelEnum = pgEnum('difficulty_level', ['beginner', 'intermediate', 'advanced']);
-const practiceTypeEnum = pgEnum('practice_type', ['speaking', 'listening']);
-const favoriteTypeEnum = pgEnum('favorite_type', ['vocabulary', 'quiz']);
+export const difficultyLevelEnum = pgEnum('difficulty_level', ['beginner', 'intermediate', 'advanced']);
+export const practiceTypeEnum = pgEnum('practice_type', ['speaking', 'listening']);
+export const favoriteTypeEnum = pgEnum('favorite_type', ['vocabulary', 'quiz']);
 
 export const vocabularyItem = pgTable('vocabulary_item', {
 	id: uuid('id').primaryKey().defaultRandom(),

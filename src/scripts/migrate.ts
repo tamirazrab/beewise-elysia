@@ -15,6 +15,10 @@ async function runMigrations() {
 	appLogger.info('[MIGRATION] Starting database migration...');
 
 	const migrationClient = postgres(DATABASE_URL, { max: 1 });
+
+	// Ensure tables are created in public schema (avoids "no schema has been selected to create in")
+	await migrationClient.unsafe('SET search_path TO public');
+
 	const db = drizzle(migrationClient);
 
 	try {

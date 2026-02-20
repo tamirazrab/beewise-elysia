@@ -26,6 +26,7 @@ const EnvSchema = Type.Object({
 	DATABASE_URL: Type.String({
 		description: 'PostgreSQL connection string',
 		pattern: '^(postgres|postgresql)://.+',
+		default: 'postgresql://localhost:5432/beewise',
 	}),
 
 	// Authentication
@@ -43,6 +44,7 @@ const EnvSchema = Type.Object({
 		Type.String({
 			minLength: 32,
 			description: 'Secret key for Better Auth (min 32 characters)',
+			default: 'development-secret-min-32-characters-long',
 		}),
 	),
 	BETTER_AUTH_URL: Type.Optional(
@@ -78,6 +80,7 @@ const EnvSchema = Type.Object({
 	RESEND_API_KEY: Type.Optional(
 		Type.String({
 			description: 'Resend API key for sending emails (optional - logs to console if not set)',
+			default: '',
 		}),
 	),
 	EMAIL_FROM: Type.String({
@@ -119,11 +122,13 @@ const EnvSchema = Type.Object({
 	AWS_ACCESS_KEY_ID: Type.Optional(
 		Type.String({
 			description: 'AWS access key ID for Bedrock and S3',
+			default: '',
 		}),
 	),
 	AWS_SECRET_ACCESS_KEY: Type.Optional(
 		Type.String({
 			description: 'AWS secret access key for Bedrock and S3',
+			default: '',
 		}),
 	),
 	AWS_REGION: Type.String({
@@ -136,7 +141,7 @@ const EnvSchema = Type.Object({
 	}),
 	BEDROCK_MODEL_ID: Type.String({
 		description: 'AWS Bedrock model ID',
-		default: 'amazon.titan-text-lite-v1',
+		default: 'openai.gpt-oss-120b-1:0',
 	}),
 	BEDROCK_COST_PER_1K_TOKENS: Type.String({
 		description: 'Bedrock cost per 1K tokens',
@@ -147,6 +152,7 @@ const EnvSchema = Type.Object({
 	OPENAI_API_KEY: Type.Optional(
 		Type.String({
 			description: 'OpenAI API key',
+			default: 'sk-proj-1234567890',
 		}),
 	),
 	OPENAI_MODEL: Type.String({
@@ -166,31 +172,37 @@ const EnvSchema = Type.Object({
 	GOOGLE_CLIENT_ID: Type.Optional(
 		Type.String({
 			description: 'Google OAuth client ID',
+			default: '',
 		}),
 	),
 	GOOGLE_CLIENT_SECRET: Type.Optional(
 		Type.String({
 			description: 'Google OAuth client secret',
+			default: '',
 		}),
 	),
 	APPLE_CLIENT_ID: Type.Optional(
 		Type.String({
 			description: 'Apple OAuth client ID',
+			default: '',
 		}),
 	),
 	APPLE_TEAM_ID: Type.Optional(
 		Type.String({
 			description: 'Apple Developer Team ID',
+			default: '',
 		}),
 	),
 	APPLE_KEY_ID: Type.Optional(
 		Type.String({
 			description: 'Apple Sign in with Apple key ID',
+			default: '',
 		}),
 	),
 	APPLE_PRIVATE_KEY: Type.Optional(
 		Type.String({
 			description: 'Apple .p8 private key content',
+			default: '',
 		}),
 	),
 
@@ -229,44 +241,44 @@ export function validateEnv(): Env {
 		NODE_ENV: process.env['NODE_ENV'] || 'development',
 		PORT: Number(process.env['PORT'] ?? 3000),
 		HOST: process.env['HOST'] || '0.0.0.0',
-		DATABASE_URL: process.env['DATABASE_URL'],
+		DATABASE_URL: process.env['DATABASE_URL'] || 'postgresql://localhost:5432/beewise',
 		ENABLE_AUTH: process.env['ENABLE_AUTH'] !== 'false',
 		REQUIRE_EMAIL_VERIFICATION: process.env['REQUIRE_EMAIL_VERIFICATION'] === 'true',
-		BETTER_AUTH_SECRET: process.env['BETTER_AUTH_SECRET'],
+		BETTER_AUTH_SECRET: process.env['BETTER_AUTH_SECRET'] || 'development-secret-min-32-characters-long',
 		BETTER_AUTH_URL: process.env['BETTER_AUTH_URL'] || 'http://localhost:3000',
 		LOG_LEVEL: process.env['LOG_LEVEL'] || 'info',
 		CORS_ORIGIN: corsOriginArray,
-		RESEND_API_KEY: process.env['RESEND_API_KEY'],
+		RESEND_API_KEY: process.env['RESEND_API_KEY'] ?? '',
 		EMAIL_FROM: process.env['EMAIL_FROM'] || 'noreply@example.com',
 		ENABLE_RATE_LIMITER: process.env['ENABLE_RATE_LIMITER'] !== 'false',
 		RATE_LIMIT_WINDOW_MS: process.env['RATE_LIMIT_WINDOW_MS']
 			? Number(process.env['RATE_LIMIT_WINDOW_MS'])
-			: undefined,
+			: 60000,
 		RATE_LIMIT_MAX: process.env['RATE_LIMIT_MAX']
 			? Number(process.env['RATE_LIMIT_MAX'])
-			: undefined,
+			: 100,
 		AUTH_RATE_LIMIT_WINDOW_MS: process.env['AUTH_RATE_LIMIT_WINDOW_MS']
 			? Number(process.env['AUTH_RATE_LIMIT_WINDOW_MS'])
-			: undefined,
+			: 60000,
 		AUTH_RATE_LIMIT_MAX: process.env['AUTH_RATE_LIMIT_MAX']
 			? Number(process.env['AUTH_RATE_LIMIT_MAX'])
-			: undefined,
-		AWS_ACCESS_KEY_ID: process.env['AWS_ACCESS_KEY_ID'],
-		AWS_SECRET_ACCESS_KEY: process.env['AWS_SECRET_ACCESS_KEY'],
+			: 10,
+		AWS_ACCESS_KEY_ID: process.env['AWS_ACCESS_KEY_ID'] ?? '',
+		AWS_SECRET_ACCESS_KEY: process.env['AWS_SECRET_ACCESS_KEY'] ?? '',
 		AWS_REGION: process.env['AWS_REGION'] || 'us-east-1',
 		S3_BUCKET_NAME: process.env['S3_BUCKET_NAME'] || 'beewise-practice-recordings',
 		BEDROCK_MODEL_ID: process.env['BEDROCK_MODEL_ID'] || 'amazon.titan-text-lite-v1',
 		BEDROCK_COST_PER_1K_TOKENS: process.env['BEDROCK_COST_PER_1K_TOKENS'] || '0.0001',
-		OPENAI_API_KEY: process.env['OPENAI_API_KEY'],
+		OPENAI_API_KEY: process.env['OPENAI_API_KEY'] ?? 'sk-proj-1234567890',
 		OPENAI_MODEL: process.env['OPENAI_MODEL'] || 'gpt-4o-mini',
 		OPENAI_INPUT_COST_PER_1K: process.env['OPENAI_INPUT_COST_PER_1K'] || '0.15',
 		OPENAI_OUTPUT_COST_PER_1K: process.env['OPENAI_OUTPUT_COST_PER_1K'] || '0.60',
-		GOOGLE_CLIENT_ID: process.env['GOOGLE_CLIENT_ID'],
-		GOOGLE_CLIENT_SECRET: process.env['GOOGLE_CLIENT_SECRET'],
-		APPLE_CLIENT_ID: process.env['APPLE_CLIENT_ID'],
-		APPLE_TEAM_ID: process.env['APPLE_TEAM_ID'],
-		APPLE_KEY_ID: process.env['APPLE_KEY_ID'],
-		APPLE_PRIVATE_KEY: process.env['APPLE_PRIVATE_KEY'],
+		GOOGLE_CLIENT_ID: process.env['GOOGLE_CLIENT_ID'] ?? '',
+		GOOGLE_CLIENT_SECRET: process.env['GOOGLE_CLIENT_SECRET'] ?? '',
+		APPLE_CLIENT_ID: process.env['APPLE_CLIENT_ID'] ?? '',
+		APPLE_TEAM_ID: process.env['APPLE_TEAM_ID'] ?? '',
+		APPLE_KEY_ID: process.env['APPLE_KEY_ID'] ?? '',
+		APPLE_PRIVATE_KEY: process.env['APPLE_PRIVATE_KEY'] ?? '',
 		DAILY_MESSAGE_LIMIT: process.env['DAILY_MESSAGE_LIMIT'] || '50',
 		DAILY_TOKEN_LIMIT: process.env['DAILY_TOKEN_LIMIT'] || '10000',
 		MONTHLY_SESSION_LIMIT: process.env['MONTHLY_SESSION_LIMIT'] || '10',

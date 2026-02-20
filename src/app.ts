@@ -3,7 +3,6 @@ import { cors } from '@elysiajs/cors';
 import { swagger } from '@elysiajs/swagger';
 import { authModule } from '@modules/auth';
 import { healthModule } from '@modules/health';
-import { postsModule } from '@modules/posts';
 import {
 	freeAIChatModule,
 	usageModule,
@@ -41,54 +40,25 @@ export const createApp = () => {
 				path: '/docs',
 				documentation: {
 					info: {
-						title: 'Elysia Production API',
+						title: 'Beewise API',
 						version: '1.0.0',
 						description:
-							'Production-ready Elysia.js backend with auth, database, and best practices.\n\n' +
-							'Full Better Auth documentation: https://better-auth.com',
+							'Language learning API: vocabulary, progress, practice, quizzes, and AI chat.\n\n' +
+							'**Getting started:** Use `POST /api/auth/sign-in/email` to sign in (or sign up with `POST /api/auth/sign-up/email`). ' +
+							'Protected routes require the session cookie. Request bodies in the Scalar client are prefilled with realistic examples for quick testing.\n\n' +
+							'Auth: [Better Auth](https://better-auth.com)',
 					},
 					tags: [
-						{ name: 'Health', description: 'Health check endpoints' },
-						{
-							name: 'Auth',
-							description: 'Authentication endpoints (Better Auth)',
-						},
-						{
-							name: 'Posts',
-							description: 'Posts CRUD endpoints (reference implementation)',
-						},
-						{
-							name: 'Free AI Chat',
-							description: 'Free-tier AI chat endpoints',
-						},
-						{
-							name: 'Paid AI Chat',
-							description: 'Paid-tier AI chat endpoints',
-						},
-						{
-							name: 'Vocabulary',
-							description: 'Vocabulary learning endpoints',
-						},
-						{
-							name: 'Progress',
-							description: 'Vocabulary progress tracking',
-						},
-						{
-							name: 'Practice',
-							description: 'Practice sessions and recordings',
-						},
-						{
-							name: 'Quiz',
-							description: 'Quiz endpoints',
-						},
-						{
-							name: 'Favorites',
-							description: 'Favorite items management',
-						},
-						{
-							name: 'Voice Chat',
-							description: 'Voice chat endpoints',
-						},
+						{ name: 'Health', description: 'Liveness and readiness checks' },
+						{ name: 'Auth', description: 'Sign up, sign in, sign out, password reset (Better Auth)' },
+						{ name: 'Free AI Chat', description: 'Free-tier conversation sessions and messages' },
+						{ name: 'Paid AI Chat', description: 'Paid-tier AI chat sessions and usage' },
+						{ name: 'Vocabulary', description: 'Vocabulary items CRUD (admin) and listing' },
+						{ name: 'Progress', description: 'User vocabulary progress and review items' },
+						{ name: 'Practice', description: 'Speaking/listening practice sessions and recordings' },
+						{ name: 'Quiz', description: 'Quizzes, questions, and attempt submission' },
+						{ name: 'Favorites', description: 'Favorite vocabulary items and quizzes' },
+						{ name: 'Voice Chat', description: 'Voice session limits and session start' },
 					],
 				},
 				scalarConfig: {
@@ -143,7 +113,6 @@ export const createApp = () => {
 
 		// Feature modules
 		.use(healthModule)
-		.use(postsModule)
 		.use(freeAIChatModule)
 		.use(usageModule)
 		.use(limitsModule)

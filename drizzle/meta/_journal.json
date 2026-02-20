@@ -1,13 +1,11 @@
 {
-  "version": "5",
-  "dialect": "pg",
+  "version": "7",
+  "dialect": "postgresql",
   "entries": [
-    {
-      "idx": 0,
-      "version": "7",
-      "when": 1768558975621,
-      "tag": "0000_easy_venom",
-      "breakpoints": true
-    }
+    { "idx": 0, "version": "7", "when": 1771587240934, "tag": "0000_absent_maddog", "breakpoints": true },
+    { "idx": 1, "version": "7", "when": 1771620000000, "tag": "0001_add_usage_composite_pks", "breakpoints": true },
+    { "idx": 2, "version": "7", "when": 1771650000000, "tag": "0002_add_user_role", "breakpoints": true },
+    { "idx": 3, "version": "7", "when": 1771604849128, "tag": "0003_sour_thunderbolt", "breakpoints": true },
+    { "idx": 4, "version": "7", "when": 1771700000000, "tag": "0004_drop_posts", "breakpoints": true }
   ]
 }

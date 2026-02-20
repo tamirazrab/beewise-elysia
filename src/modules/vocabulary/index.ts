@@ -38,18 +38,22 @@ const practiceTypeEnum = t.Union([t.Literal('speaking'), t.Literal('listening')]
 
 const favoriteTypeEnum = t.Union([t.Literal('vocabulary'), t.Literal('quiz')]);
 
-// Schemas
+// Schemas (with descriptions for API docs)
 const createVocabularySchema = t.Object({
-	languageCode: t.String({ minLength: 2, maxLength: 5 }),
+	languageCode: t.String({
+		minLength: 2,
+		maxLength: 5,
+		description: 'ISO 639-1 language code (e.g. en, es, fr)',
+	}),
 	difficultyLevel: difficultyLevelEnum,
-	word: t.String({ minLength: 1 }),
-	meaning: t.String({ minLength: 1 }),
-	exampleSentence: t.Optional(t.Nullable(t.String())),
-	audioUrl: t.Optional(t.Nullable(t.String())),
+	word: t.String({ minLength: 1, description: 'The word or phrase in the target language' }),
+	meaning: t.String({ minLength: 1, description: 'Meaning or translation' }),
+	exampleSentence: t.Optional(t.Nullable(t.String({ description: 'Example sentence using the word' }))),
+	audioUrl: t.Optional(t.Nullable(t.String({ description: 'Optional URL to pronunciation audio' }))),
 });
 
 const updateVocabularySchema = t.Object({
-	languageCode: t.Optional(t.String({ minLength: 2, maxLength: 5 })),
+	languageCode: t.Optional(t.String({ minLength: 2, maxLength: 5, description: 'ISO 639-1 language code' })),
 	difficultyLevel: t.Optional(difficultyLevelEnum),
 	word: t.Optional(t.String({ minLength: 1 })),
 	meaning: t.Optional(t.String({ minLength: 1 })),
@@ -58,44 +62,51 @@ const updateVocabularySchema = t.Object({
 });
 
 const updateProgressSchema = t.Object({
-	masteryLevel: t.Number({ minimum: 0, maximum: 100 }),
+	masteryLevel: t.Number({
+		minimum: 0,
+		maximum: 100,
+		description: 'Mastery level 0–100 for this vocabulary item',
+	}),
 });
 
 const createPracticeSessionSchema = t.Object({
 	type: practiceTypeEnum,
-	languageCode: t.String({ minLength: 2, maxLength: 5 }),
+	languageCode: t.String({ minLength: 2, maxLength: 5, description: 'ISO 639-1 language code' }),
 });
 
 const createRecordingSchema = t.Object({
-	durationSeconds: t.Optional(t.Nullable(t.Number())),
+	durationSeconds: t.Optional(t.Nullable(t.Number({ description: 'Recording length in seconds' }))),
 });
 
 const createQuizSchema = t.Object({
-	languageCode: t.String({ minLength: 2, maxLength: 5 }),
+	languageCode: t.String({ minLength: 2, maxLength: 5, description: 'ISO 639-1 language code' }),
 	difficultyLevel: difficultyLevelEnum,
 	questions: t.Array(
 		t.Object({
 			questionText: t.String({ minLength: 1 }),
 			options: t.Array(t.String(), { minItems: 2 }),
-			correctAnswerIndex: t.Number({ minimum: 0 }),
+			correctAnswerIndex: t.Number({ minimum: 0, description: 'Index of the correct option (0-based)' }),
 		}),
 		{ minItems: 1 },
 	),
 });
 
 const generateQuizSchema = t.Object({
-	languageCode: t.String({ minLength: 2, maxLength: 5 }),
+	languageCode: t.String({ minLength: 2, maxLength: 5, description: 'ISO 639-1 language code' }),
 	difficultyLevel: difficultyLevelEnum,
 	numQuestions: t.Optional(t.Number({ minimum: 1, maximum: 50, default: 10 })),
 });
 
 const submitQuizAttemptSchema = t.Object({
-	answers: t.Array(t.Number(), { minItems: 1 }),
+	answers: t.Array(t.Number(), {
+		minItems: 1,
+		description: 'Array of chosen option indices (0-based) per question, in order',
+	}),
 });
 
 const addFavoriteSchema = t.Object({
 	itemType: favoriteTypeEnum,
-	itemId: t.String({ format: 'uuid' }),
+	itemId: t.String({ format: 'uuid', description: 'UUID of the vocabulary item or quiz' }),
 });
 
 export const vocabularyModule = withAdmin(
@@ -258,7 +269,20 @@ export const vocabularyModule = withAdmin(
 			detail: {
 				tags: ['Vocabulary'],
 				summary: 'Create vocabulary item',
-				description: 'Admin only - Create a new vocabulary item',
+				description: 'Admin only. Create a new vocabulary item. Body prefilled with a realistic example.',
+				requestBody: {
+					content: {
+						'application/json': {
+							example: {
+								languageCode: 'es',
+								difficultyLevel: 'beginner',
+								word: 'hola',
+								meaning: 'hello',
+								exampleSentence: '¡Hola! ¿Cómo estás?',
+							},
+						},
+					},
+				},
 			},
 		},
 	)
@@ -306,7 +330,14 @@ export const vocabularyModule = withAdmin(
 			detail: {
 				tags: ['Vocabulary'],
 				summary: 'Update vocabulary item',
-				description: 'Admin only - Update an existing vocabulary item',
+				description: 'Admin only. Update an existing vocabulary item. Send only fields to change.',
+				requestBody: {
+					content: {
+						'application/json': {
+							example: { meaning: 'hello; hi', exampleSentence: 'Hola, buenos días.' },
+						},
+					},
+				},
 			},
 		},
 	)
@@ -417,7 +448,14 @@ export const vocabularyModule = withAdmin(
 			detail: {
 				tags: ['Progress'],
 				summary: 'Update progress',
-				description: 'Update or create vocabulary progress for a user',
+				description: 'Authenticated. Update or create vocabulary progress (mastery 0–100). Body prefilled.',
+				requestBody: {
+					content: {
+						'application/json': {
+							example: { masteryLevel: 75 },
+						},
+					},
+				},
 			},
 		},
 	)
@@ -501,7 +539,14 @@ export const vocabularyModule = withAdmin(
 			detail: {
 				tags: ['Practice'],
 				summary: 'Create practice session',
-				description: 'Create a new practice session',
+				description: 'Authenticated. Create a new speaking or listening practice session. Body prefilled.',
+				requestBody: {
+					content: {
+						'application/json': {
+							example: { type: 'speaking', languageCode: 'es' },
+						},
+					},
+				},
 			},
 		},
 	)
@@ -614,7 +659,14 @@ export const vocabularyModule = withAdmin(
 			detail: {
 				tags: ['Practice'],
 				summary: 'Create recording',
-				description: 'Create a practice recording and get an S3 upload URL',
+				description: 'Authenticated. Create a practice recording and get an S3 upload URL. Body prefilled.',
+				requestBody: {
+					content: {
+						'application/json': {
+							example: { durationSeconds: 12 },
+						},
+					},
+				},
 			},
 		},
 	)
@@ -833,7 +885,29 @@ export const vocabularyModule = withAdmin(
 			detail: {
 				tags: ['Quiz'],
 				summary: 'Create quiz',
-				description: 'Admin only - Create a new quiz with questions',
+				description: 'Admin only. Create a new quiz with questions. Body prefilled with a realistic example.',
+				requestBody: {
+					content: {
+						'application/json': {
+							example: {
+								languageCode: 'es',
+								difficultyLevel: 'beginner',
+								questions: [
+									{
+										questionText: 'What does "hola" mean?',
+										options: ['Hello', 'Goodbye', 'Thanks'],
+										correctAnswerIndex: 0,
+									},
+									{
+										questionText: 'What is "agua" in English?',
+										options: ['Fire', 'Water', 'Earth'],
+										correctAnswerIndex: 1,
+									},
+								],
+							},
+						},
+					},
+				},
 			},
 		},
 	)
@@ -856,7 +930,14 @@ export const vocabularyModule = withAdmin(
 			detail: {
 				tags: ['Quiz'],
 				summary: 'Generate quiz',
-				description: 'Admin only - Generate a quiz automatically using AI',
+				description: 'Admin only. Generate a quiz using AI (not yet implemented). Body prefilled.',
+				requestBody: {
+					content: {
+						'application/json': {
+							example: { languageCode: 'es', difficultyLevel: 'beginner', numQuestions: 10 },
+						},
+					},
+				},
 			},
 		},
 	)
@@ -925,7 +1006,14 @@ export const vocabularyModule = withAdmin(
 			detail: {
 				tags: ['Quiz'],
 				summary: 'Submit quiz attempt',
-				description: 'Submit answers for a quiz and get the score',
+				description: 'Authenticated. Submit answer indices (0-based) for each question. Body prefilled.',
+				requestBody: {
+					content: {
+						'application/json': {
+							example: { answers: [0, 1, 2] },
+						},
+					},
+				},
 			},
 		},
 	)
@@ -1015,7 +1103,14 @@ export const vocabularyModule = withAdmin(
 			detail: {
 				tags: ['Favorites'],
 				summary: 'Add favorite',
-				description: 'Add a vocabulary item or quiz to favorites',
+				description: 'Authenticated. Add a vocabulary item or quiz to favorites. Body prefilled (replace itemId with a real UUID).',
+				requestBody: {
+					content: {
+						'application/json': {
+							example: { itemType: 'vocabulary', itemId: '00000000-0000-0000-0000-000000000001' },
+						},
+					},
+				},
 			},
 		},
 	)

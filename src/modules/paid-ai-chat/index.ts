@@ -54,12 +54,22 @@ export const paidAIChatModule = withAuth(new Elysia({ prefix: '/api/paid' }))
 		{
 			auth: true,
 			body: t.Object({
-				language_code: t.String(),
+				language_code: t.String({
+					description: 'ISO 639-1 language code (e.g. en, es, fr)',
+					default: 'es',
+				}),
 			}),
 			detail: {
 				tags: ['Paid AI Chat'],
 				summary: 'Create session',
-				description: 'Create a new conversation session for paid-tier users',
+				description: 'Authenticated. Create a new paid-tier conversation session. Body prefilled with example.',
+				requestBody: {
+					content: {
+						'application/json': {
+							example: { language_code: 'es' },
+						},
+					},
+				},
 			},
 		},
 	)
@@ -134,12 +144,22 @@ export const paidAIChatModule = withAuth(new Elysia({ prefix: '/api/paid' }))
 				id: t.String(),
 			}),
 			body: t.Object({
-				content: t.String(),
+				content: t.String({
+					description: 'User message to send to the AI',
+					default: "What are some common Spanish greetings?",
+				}),
 			}),
 			detail: {
 				tags: ['Paid AI Chat'],
 				summary: 'Send message',
-				description: 'Send a message in a paid conversation session',
+				description: 'Authenticated. Send a message in a paid session. Body prefilled with example.',
+				requestBody: {
+					content: {
+						'application/json': {
+							example: { content: "What are some common Spanish greetings?" },
+						},
+					},
+				},
 			},
 		},
 	)

@@ -13,6 +13,15 @@ export const auth = betterAuth({
 	database: drizzleAdapter(db, {
 		provider: 'pg',
 	}),
+	user: {
+		additionalFields: {
+			role: {
+				type: 'string',
+				required: false,
+			},
+		},
+	},
+	trustedOrigins: ['http://127.0.0.1:3000', 'http://localhost:3000'],
 	emailAndPassword: {
 		enabled: true,
 		minPasswordLength: 8,

@@ -1,12 +1,12 @@
-import { pgEnum, pgTable, text, timestamp, uuid, integer, decimal } from 'drizzle-orm/pg-core';
+import { pgEnum, pgTable, primaryKey, text, timestamp, uuid, integer, decimal } from 'drizzle-orm/pg-core';
 import { user } from './auth';
 
 /**
  * Free AI Chat tables - conversation sessions, messages, usage tracking
  */
 
-const sessionStatusEnum = pgEnum('session_status', ['active', 'closed']);
-const planTypeEnum = pgEnum('plan_type', ['free', 'trial', 'expired']);
+export const sessionStatusEnum = pgEnum('session_status', ['active', 'closed']);
+export const planTypeEnum = pgEnum('plan_type', ['free', 'trial', 'expired']);
 
 export const conversationSession = pgTable('conversation_session', {
 	id: uuid('id').primaryKey().defaultRandom(),
@@ -43,9 +43,9 @@ export const userUsageDaily = pgTable('user_usage_daily', {
 	messageCount: integer('message_count').notNull().default(0),
 	tokenCount: integer('token_count').notNull().default(0),
 	sessionCount: integer('session_count').notNull().default(0),
-}, (table) => ({
-	pk: { primaryKey: { columns: [table.userId, table.usageDate] } },
-}));
+}, (table) => [
+	primaryKey({ name: 'user_usage_daily_pkey', columns: [table.userId, table.usageDate] }),
+]);
 
 export const userUsageMonthly = pgTable('user_usage_monthly', {
 	userId: text('user_id')
@@ -54,9 +54,9 @@ export const userUsageMonthly = pgTable('user_usage_monthly', {
 	usageYear: integer('usage_year').notNull(),
 	usageMonth: integer('usage_month').notNull(),
 	sessionCount: integer('session_count').notNull().default(0),
-}, (table) => ({
-	pk: { primaryKey: { columns: [table.userId, table.usageYear, table.usageMonth] } },
-}));
+}, (table) => [
+	primaryKey({ name: 'user_usage_monthly_pkey', columns: [table.userId, table.usageYear, table.usageMonth] }),
+]);
 
 export const freeSubscriptionStatus = pgTable('free_subscription_status', {
 	userId: text('user_id')

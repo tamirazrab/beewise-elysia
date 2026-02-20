@@ -88,12 +88,22 @@ export const freeAIChatModule = withAuth(new Elysia({ prefix: '/api/free' }))
 		{
 			auth: true,
 			body: t.Object({
-				language_code: t.String(),
+				language_code: t.String({
+					description: 'ISO 639-1 language code for the conversation (e.g. en, es, fr)',
+					default: 'es',
+				}),
 			}),
 			detail: {
 				tags: ['Free AI Chat'],
 				summary: 'Create session',
-				description: 'Create a new conversation session for free-tier users',
+				description: 'Authenticated. Create a new free-tier conversation session. Request body is prefilled with a sample.',
+				requestBody: {
+					content: {
+						'application/json': {
+							example: { language_code: 'es' },
+						},
+					},
+				},
 			},
 		},
 	)
@@ -383,12 +393,22 @@ export const freeAIChatModule = withAuth(new Elysia({ prefix: '/api/free' }))
 				id: t.String(),
 			}),
 			body: t.Object({
-				content: t.String(),
+				content: t.String({
+					description: 'The user message to send to the AI',
+					default: "How do I say 'I am learning Spanish' in Spanish?",
+				}),
 			}),
 			detail: {
 				tags: ['Free AI Chat'],
 				summary: 'Send message',
-				description: 'Send a message in a conversation session',
+				description: 'Authenticated. Send a message in an active conversation session. Body is prefilled with an example.',
+				requestBody: {
+					content: {
+						'application/json': {
+							example: { content: "How do I say 'I am learning Spanish' in Spanish?" },
+						},
+					},
+				},
 			},
 		},
 	)
