@@ -1,0 +1,288 @@
+import { type Static, Type } from '@sinclair/typebox';
+import { Value } from '@sinclair/typebox/value';
+/**
+ * Environment configuration and validation.
+ *
+ * Validates all required environment variables at startup
+ * to fail fast on misconfiguration.
+ */
+
+const EnvSchema = Type.Object({
+	// Application
+	NODE_ENV: Type.Union(
+		[Type.Literal('development'), Type.Literal('production'), Type.Literal('test')],
+		{
+			default: 'development',
+		},
+	),
+	PORT: Type.Number({
+		default: 3000,
+	}),
+	HOST: Type.String({
+		default: '0.0.0.0',
+	}),
+
+	// Database
+	DATABASE_URL: Type.String({
+		description: 'PostgreSQL connection string',
+		pattern: '^(postgres|postgresql)://.+',
+	}),
+
+	// Authentication
+	ENABLE_AUTH: Type.Boolean({
+		default: true,
+		description: 'Enable/disable Better Auth module',
+	}),
+	REQUIRE_EMAIL_VERIFICATION: Type.Boolean({
+		default: false,
+		description: 'Require email verification before login',
+	}),
+
+	// Better Auth (required if ENABLE_AUTH=true)
+	BETTER_AUTH_SECRET: Type.Optional(
+		Type.String({
+			minLength: 32,
+			description: 'Secret key for Better Auth (min 32 characters)',
+		}),
+	),
+	BETTER_AUTH_URL: Type.Optional(
+		Type.String({
+			default: 'http://localhost:3000',
+			description: 'Base URL for authentication callbacks',
+			pattern: '^https?://.+',
+		}),
+	),
+
+	// Logging
+	LOG_LEVEL: Type.Union(
+		[
+			Type.Literal('fatal'),
+			Type.Literal('error'),
+			Type.Literal('warn'),
+			Type.Literal('info'),
+			Type.Literal('debug'),
+			Type.Literal('trace'),
+		],
+		{
+			default: 'info',
+		},
+	),
+
+	// CORS
+	CORS_ORIGIN: Type.Array(Type.String(), {
+		description: 'Allowed CORS origins (comma-separated)',
+		default: ['http://localhost:3000'],
+	}),
+
+	// Email (Optional - for email verification and password reset)
+	RESEND_API_KEY: Type.Optional(
+		Type.String({
+			description: 'Resend API key for sending emails (optional - logs to console if not set)',
+		}),
+	),
+	EMAIL_FROM: Type.String({
+		description: 'Email sender address',
+		default: 'noreply@example.com',
+	}),
+
+	// Rate Limiting
+	ENABLE_RATE_LIMITER: Type.Boolean({
+		default: true,
+		description: 'Enable/disable rate limiting',
+	}),
+	RATE_LIMIT_WINDOW_MS: Type.Optional(
+		Type.Number({
+			description: 'Global rate limit window in milliseconds',
+			default: 60000,
+		}),
+	),
+	RATE_LIMIT_MAX: Type.Optional(
+		Type.Number({
+			description: 'Max requests per window',
+			default: 100,
+		}),
+	),
+	AUTH_RATE_LIMIT_WINDOW_MS: Type.Optional(
+		Type.Number({
+			description: 'Auth rate limit window in milliseconds',
+			default: 60000,
+		}),
+	),
+	AUTH_RATE_LIMIT_MAX: Type.Optional(
+		Type.Number({
+			description: 'Max auth requests per window',
+			default: 10,
+		}),
+	),
+
+	// AWS (for Bedrock and S3)
+	AWS_ACCESS_KEY_ID: Type.Optional(
+		Type.String({
+			description: 'AWS access key ID for Bedrock and S3',
+		}),
+	),
+	AWS_SECRET_ACCESS_KEY: Type.Optional(
+		Type.String({
+			description: 'AWS secret access key for Bedrock and S3',
+		}),
+	),
+	AWS_REGION: Type.String({
+		description: 'AWS region',
+		default: 'us-east-1',
+	}),
+	S3_BUCKET_NAME: Type.String({
+		description: 'S3 bucket name for practice recordings',
+		default: 'beewise-practice-recordings',
+	}),
+	BEDROCK_MODEL_ID: Type.String({
+		description: 'AWS Bedrock model ID',
+		default: 'amazon.titan-text-lite-v1',
+	}),
+	BEDROCK_COST_PER_1K_TOKENS: Type.String({
+		description: 'Bedrock cost per 1K tokens',
+		default: '0.0001',
+	}),
+
+	// OpenAI (for paid AI chat)
+	OPENAI_API_KEY: Type.Optional(
+		Type.String({
+			description: 'OpenAI API key',
+		}),
+	),
+	OPENAI_MODEL: Type.String({
+		description: 'OpenAI model name',
+		default: 'gpt-4o-mini',
+	}),
+	OPENAI_INPUT_COST_PER_1K: Type.String({
+		description: 'OpenAI input cost per 1K tokens',
+		default: '0.15',
+	}),
+	OPENAI_OUTPUT_COST_PER_1K: Type.String({
+		description: 'OpenAI output cost per 1K tokens',
+		default: '0.60',
+	}),
+
+	// OAuth (Google and Apple)
+	GOOGLE_CLIENT_ID: Type.Optional(
+		Type.String({
+			description: 'Google OAuth client ID',
+		}),
+	),
+	GOOGLE_CLIENT_SECRET: Type.Optional(
+		Type.String({
+			description: 'Google OAuth client secret',
+		}),
+	),
+	APPLE_CLIENT_ID: Type.Optional(
+		Type.String({
+			description: 'Apple OAuth client ID',
+		}),
+	),
+	APPLE_TEAM_ID: Type.Optional(
+		Type.String({
+			description: 'Apple Developer Team ID',
+		}),
+	),
+	APPLE_KEY_ID: Type.Optional(
+		Type.String({
+			description: 'Apple Sign in with Apple key ID',
+		}),
+	),
+	APPLE_PRIVATE_KEY: Type.Optional(
+		Type.String({
+			description: 'Apple .p8 private key content',
+		}),
+	),
+
+	// Free AI Chat Limits
+	DAILY_MESSAGE_LIMIT: Type.String({
+		description: 'Daily message limit for free tier',
+		default: '50',
+	}),
+	DAILY_TOKEN_LIMIT: Type.String({
+		description: 'Daily token limit for free tier',
+		default: '10000',
+	}),
+	MONTHLY_SESSION_LIMIT: Type.String({
+		description: 'Monthly session limit for free tier',
+		default: '10',
+	}),
+	MAX_MESSAGES_PER_SESSION: Type.String({
+		description: 'Max messages per session',
+		default: '20',
+	}),
+	MAX_TOKENS_PER_REQUEST: Type.String({
+		description: 'Max tokens per request',
+		default: '2000',
+	}),
+});
+
+export type Env = Static<typeof EnvSchema>;
+
+export function validateEnv(): Env {
+	const rawCorsOrigin = process.env['CORS_ORIGIN'];
+	const corsOriginArray = rawCorsOrigin
+		? rawCorsOrigin.split(',').map((origin) => origin.trim())
+		: ['http://localhost:3000']; // Default fallback
+
+	const rawEnv = {
+		NODE_ENV: process.env['NODE_ENV'] || 'development',
+		PORT: Number(process.env['PORT'] ?? 3000),
+		HOST: process.env['HOST'] || '0.0.0.0',
+		DATABASE_URL: process.env['DATABASE_URL'],
+		ENABLE_AUTH: process.env['ENABLE_AUTH'] !== 'false',
+		REQUIRE_EMAIL_VERIFICATION: process.env['REQUIRE_EMAIL_VERIFICATION'] === 'true',
+		BETTER_AUTH_SECRET: process.env['BETTER_AUTH_SECRET'],
+		BETTER_AUTH_URL: process.env['BETTER_AUTH_URL'] || 'http://localhost:3000',
+		LOG_LEVEL: process.env['LOG_LEVEL'] || 'info',
+		CORS_ORIGIN: corsOriginArray,
+		RESEND_API_KEY: process.env['RESEND_API_KEY'],
+		EMAIL_FROM: process.env['EMAIL_FROM'] || 'noreply@example.com',
+		ENABLE_RATE_LIMITER: process.env['ENABLE_RATE_LIMITER'] !== 'false',
+		RATE_LIMIT_WINDOW_MS: process.env['RATE_LIMIT_WINDOW_MS']
+			? Number(process.env['RATE_LIMIT_WINDOW_MS'])
+			: undefined,
+		RATE_LIMIT_MAX: process.env['RATE_LIMIT_MAX']
+			? Number(process.env['RATE_LIMIT_MAX'])
+			: undefined,
+		AUTH_RATE_LIMIT_WINDOW_MS: process.env['AUTH_RATE_LIMIT_WINDOW_MS']
+			? Number(process.env['AUTH_RATE_LIMIT_WINDOW_MS'])
+			: undefined,
+		AUTH_RATE_LIMIT_MAX: process.env['AUTH_RATE_LIMIT_MAX']
+			? Number(process.env['AUTH_RATE_LIMIT_MAX'])
+			: undefined,
+		AWS_ACCESS_KEY_ID: process.env['AWS_ACCESS_KEY_ID'],
+		AWS_SECRET_ACCESS_KEY: process.env['AWS_SECRET_ACCESS_KEY'],
+		AWS_REGION: process.env['AWS_REGION'] || 'us-east-1',
+		S3_BUCKET_NAME: process.env['S3_BUCKET_NAME'] || 'beewise-practice-recordings',
+		BEDROCK_MODEL_ID: process.env['BEDROCK_MODEL_ID'] || 'amazon.titan-text-lite-v1',
+		BEDROCK_COST_PER_1K_TOKENS: process.env['BEDROCK_COST_PER_1K_TOKENS'] || '0.0001',
+		OPENAI_API_KEY: process.env['OPENAI_API_KEY'],
+		OPENAI_MODEL: process.env['OPENAI_MODEL'] || 'gpt-4o-mini',
+		OPENAI_INPUT_COST_PER_1K: process.env['OPENAI_INPUT_COST_PER_1K'] || '0.15',
+		OPENAI_OUTPUT_COST_PER_1K: process.env['OPENAI_OUTPUT_COST_PER_1K'] || '0.60',
+		GOOGLE_CLIENT_ID: process.env['GOOGLE_CLIENT_ID'],
+		GOOGLE_CLIENT_SECRET: process.env['GOOGLE_CLIENT_SECRET'],
+		APPLE_CLIENT_ID: process.env['APPLE_CLIENT_ID'],
+		APPLE_TEAM_ID: process.env['APPLE_TEAM_ID'],
+		APPLE_KEY_ID: process.env['APPLE_KEY_ID'],
+		APPLE_PRIVATE_KEY: process.env['APPLE_PRIVATE_KEY'],
+		DAILY_MESSAGE_LIMIT: process.env['DAILY_MESSAGE_LIMIT'] || '50',
+		DAILY_TOKEN_LIMIT: process.env['DAILY_TOKEN_LIMIT'] || '10000',
+		MONTHLY_SESSION_LIMIT: process.env['MONTHLY_SESSION_LIMIT'] || '10',
+		MAX_MESSAGES_PER_SESSION: process.env['MAX_MESSAGES_PER_SESSION'] || '20',
+		MAX_TOKENS_PER_REQUEST: process.env['MAX_TOKENS_PER_REQUEST'] || '2000',
+	};
+
+	// Validate against schema
+	if (!Value.Check(EnvSchema, rawEnv)) {
+		const errors = [...Value.Errors(EnvSchema, rawEnv)];
+		const errorMessages = errors.map((error) => `  - ${error.path}: ${error.message}`).join('\n');
+
+		throw new Error(`[ERROR] Environment validation failed:\n${errorMessages}`);
+	}
+
+	return Value.Decode(EnvSchema, rawEnv);
+}
+
+export const env = validateEnv();
