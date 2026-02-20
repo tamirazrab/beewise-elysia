@@ -1,11 +1,1 @@
-{
-  "version": "7",
-  "dialect": "postgresql",
-  "entries": [
-    { "idx": 0, "version": "7", "when": 1771587240934, "tag": "0000_absent_maddog", "breakpoints": true },
-    { "idx": 1, "version": "7", "when": 1771620000000, "tag": "0001_add_usage_composite_pks", "breakpoints": true },
-    { "idx": 2, "version": "7", "when": 1771650000000, "tag": "0002_add_user_role", "breakpoints": true },
-    { "idx": 3, "version": "7", "when": 1771604849128, "tag": "0003_sour_thunderbolt", "breakpoints": true },
-    { "idx": 4, "version": "7", "when": 1771700000000, "tag": "0004_drop_posts", "breakpoints": true }
-  ]
-}
+{"version":"7","dialect":"postgresql","entries":[{"idx":0,"version":"7","when":1771587240934,"tag":"0000_absent_maddog","breakpoints":true},{"idx":1,"version":"7","when":1771620000000,"tag":"0001_add_usage_composite_pks","breakpoints":true},{"idx":2,"version":"7","when":1771650000000,"tag":"0002_add_user_role","breakpoints":true},{"idx":3,"version":"7","when":1771604849128,"tag":"0003_sour_thunderbolt","breakpoints":true},{"idx":4,"version":"7","when":1771700000000,"tag":"0004_drop_posts","breakpoints":true},{"idx":5,"version":"7","when":1771710000000,"tag":"0005_add_user_vocabulary_progress_pk","breakpoints":true}]}

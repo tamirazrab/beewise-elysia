@@ -24,6 +24,18 @@ export const authModule = new Elysia({ prefix: '/api/auth' })
 				'- `name` (string, required)\n' +
 				'- `image` (string, optional)\n' +
 				'- `callbackURL` (string, optional)',
+			requestBody: {
+				content: {
+					'application/json': {
+						example: {
+							email: 'alice@example.com',
+							password: 'SecurePass123!',
+							name: 'Alice Smith',
+							callbackURL: '/',
+						},
+					},
+				},
+			},
 		},
 	})
 	// Sign In with Email
@@ -32,11 +44,18 @@ export const authModule = new Elysia({ prefix: '/api/auth' })
 			tags: ['Auth'],
 			summary: 'Login with email',
 			description:
-				'Authenticate and start a session using email and password.\n\n' +
-				'**Request Body (JSON):**\n' +
-				'- `email` (string, required)\n' +
-				'- `password` (string, required)\n' +
-				'- `callbackURL` (string, optional)',
+				'Authenticate and start a session using email and password. On success, the response sets a session cookie; use the same origin (e.g. /docs on this host) when calling protected routes so the cookie is sent.',
+			requestBody: {
+				content: {
+					'application/json': {
+						example: {
+							email: 'alice@example.com',
+							password: 'SecurePass123!',
+							callbackURL: '/',
+						},
+					},
+				},
+			},
 		},
 	})
 	// Sign Out
@@ -67,6 +86,16 @@ export const authModule = new Elysia({ prefix: '/api/auth' })
 				'**Request Body (JSON):**\n' +
 				'- `email` (string, required)\n' +
 				'- `redirectTo` (string, optional)',
+			requestBody: {
+				content: {
+					'application/json': {
+						example: {
+							email: 'alice@example.com',
+							redirectTo: '/reset-password',
+						},
+					},
+				},
+			},
 		},
 	})
 	// Reset Password (after clicking link in email)
@@ -79,6 +108,16 @@ export const authModule = new Elysia({ prefix: '/api/auth' })
 				'**Request Body (JSON):**\n' +
 				'- `token` (string, required)\n' +
 				'- `newPassword` (string, required)',
+			requestBody: {
+				content: {
+					'application/json': {
+						example: {
+							token: 'your-reset-token-from-email',
+							newPassword: 'NewSecurePass456!',
+						},
+					},
+				},
+			},
 		},
 	})
 	// Catch-all for other Better Auth routes

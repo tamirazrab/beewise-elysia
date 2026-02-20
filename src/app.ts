@@ -45,7 +45,8 @@ export const createApp = () => {
 						description:
 							'Language learning API: vocabulary, progress, practice, quizzes, and AI chat.\n\n' +
 							'**Getting started:** Use `POST /api/auth/sign-in/email` to sign in (or sign up with `POST /api/auth/sign-up/email`). ' +
-							'Protected routes require the session cookie. Request bodies in the Scalar client are prefilled with realistic examples for quick testing.\n\n' +
+							'Protected routes require the session cookie. Call sign-in from this docs page (same origin) so the cookie is stored and sent automatically on later requests. ' +
+							'Request bodies in the Scalar client are prefilled with realistic default JSON for quick testing.\n\n' +
 							'Auth: [Better Auth](https://better-auth.com)',
 					},
 					tags: [
@@ -63,6 +64,8 @@ export const createApp = () => {
 				},
 				scalarConfig: {
 					theme: 'purple',
+					// Persist auth state (e.g. after login) so protected routes work when testing from /docs
+					persistAuth: true,
 				},
 			}),
 		)
