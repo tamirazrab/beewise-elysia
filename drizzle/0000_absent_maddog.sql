@@ -1,14 +1,14 @@
-CREATE TYPE "session_status" AS ENUM ('active', 'closed');
+DO $$ BEGIN CREATE TYPE "session_status" AS ENUM ('active', 'closed'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
-CREATE TYPE "plan_type" AS ENUM ('free', 'trial', 'expired');
+DO $$ BEGIN CREATE TYPE "plan_type" AS ENUM ('free', 'trial', 'expired'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
-CREATE TYPE "favorite_type" AS ENUM ('vocabulary', 'quiz');
+DO $$ BEGIN CREATE TYPE "favorite_type" AS ENUM ('vocabulary', 'quiz'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
-CREATE TYPE "practice_type" AS ENUM ('speaking', 'listening');
+DO $$ BEGIN CREATE TYPE "practice_type" AS ENUM ('speaking', 'listening'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
-CREATE TYPE "difficulty_level" AS ENUM ('beginner', 'intermediate', 'advanced');
+DO $$ BEGIN CREATE TYPE "difficulty_level" AS ENUM ('beginner', 'intermediate', 'advanced'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 --> statement-breakpoint
-CREATE TABLE "account" (
+CREATE TABLE IF NOT EXISTS "account" (
 	"id" text PRIMARY KEY NOT NULL,
 	"account_id" text NOT NULL,
 	"provider_id" text NOT NULL,
@@ -24,7 +24,7 @@ CREATE TABLE "account" (
 	"updated_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "session" (
+CREATE TABLE IF NOT EXISTS "session" (
 	"id" text PRIMARY KEY NOT NULL,
 	"expires_at" timestamp NOT NULL,
 	"token" text NOT NULL,
@@ -36,7 +36,7 @@ CREATE TABLE "session" (
 	CONSTRAINT "session_token_unique" UNIQUE("token")
 );
 --> statement-breakpoint
-CREATE TABLE "user" (
+CREATE TABLE IF NOT EXISTS "user" (
 	"id" text PRIMARY KEY NOT NULL,
 	"name" text NOT NULL,
 	"email" text NOT NULL,
@@ -47,7 +47,7 @@ CREATE TABLE "user" (
 	CONSTRAINT "user_email_unique" UNIQUE("email")
 );
 --> statement-breakpoint
-CREATE TABLE "verification" (
+CREATE TABLE IF NOT EXISTS "verification" (
 	"id" text PRIMARY KEY NOT NULL,
 	"identifier" text NOT NULL,
 	"value" text NOT NULL,
@@ -56,7 +56,7 @@ CREATE TABLE "verification" (
 	"updated_at" timestamp DEFAULT now()
 );
 --> statement-breakpoint
-CREATE TABLE "posts" (
+CREATE TABLE IF NOT EXISTS "posts" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"title" text NOT NULL,
 	"content" text NOT NULL,
@@ -65,7 +65,7 @@ CREATE TABLE "posts" (
 	"updated_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "conversation_message" (
+CREATE TABLE IF NOT EXISTS "conversation_message" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"session_id" uuid NOT NULL,
 	"role" text NOT NULL,
@@ -74,7 +74,7 @@ CREATE TABLE "conversation_message" (
 	"created_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "conversation_session" (
+CREATE TABLE IF NOT EXISTS "conversation_session" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"user_id" text NOT NULL,
 	"language_code" text NOT NULL,
@@ -88,7 +88,7 @@ CREATE TABLE "conversation_session" (
 	"closed_at" timestamp
 );
 --> statement-breakpoint
-CREATE TABLE "free_subscription_status" (
+CREATE TABLE IF NOT EXISTS "free_subscription_status" (
 	"user_id" text PRIMARY KEY NOT NULL,
 	"plan_type" "plan_type" NOT NULL,
 	"trial_ends_at" timestamp,
@@ -96,7 +96,7 @@ CREATE TABLE "free_subscription_status" (
 	"updated_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "user_usage_daily" (
+CREATE TABLE IF NOT EXISTS "user_usage_daily" (
 	"user_id" text NOT NULL,
 	"usage_date" text NOT NULL,
 	"message_count" integer DEFAULT 0 NOT NULL,
@@ -104,14 +104,14 @@ CREATE TABLE "user_usage_daily" (
 	"session_count" integer DEFAULT 0 NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "user_usage_monthly" (
+CREATE TABLE IF NOT EXISTS "user_usage_monthly" (
 	"user_id" text NOT NULL,
 	"usage_year" integer NOT NULL,
 	"usage_month" integer NOT NULL,
 	"session_count" integer DEFAULT 0 NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "paid_ai_session" (
+CREATE TABLE IF NOT EXISTS "paid_ai_session" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"user_id" text NOT NULL,
 	"language_code" text NOT NULL,
@@ -119,7 +119,7 @@ CREATE TABLE "paid_ai_session" (
 	"last_message_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "paid_ai_usage" (
+CREATE TABLE IF NOT EXISTS "paid_ai_usage" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"user_id" text NOT NULL,
 	"session_id" uuid,
@@ -128,7 +128,7 @@ CREATE TABLE "paid_ai_usage" (
 	"created_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "favorite_item" (
+CREATE TABLE IF NOT EXISTS "favorite_item" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"user_id" text NOT NULL,
 	"item_type" "favorite_type" NOT NULL,
@@ -136,7 +136,7 @@ CREATE TABLE "favorite_item" (
 	"created_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "practice_recording" (
+CREATE TABLE IF NOT EXISTS "practice_recording" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"session_id" uuid NOT NULL,
 	"s3_key" text NOT NULL,
@@ -146,7 +146,7 @@ CREATE TABLE "practice_recording" (
 	"created_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "practice_session" (
+CREATE TABLE IF NOT EXISTS "practice_session" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"user_id" text NOT NULL,
 	"type" "practice_type" NOT NULL,
@@ -162,7 +162,7 @@ CREATE TABLE "quiz" (
 	"created_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "quiz_attempt" (
+CREATE TABLE IF NOT EXISTS "quiz_attempt" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"user_id" text NOT NULL,
 	"quiz_id" uuid NOT NULL,
@@ -170,7 +170,7 @@ CREATE TABLE "quiz_attempt" (
 	"completed_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "quiz_question" (
+CREATE TABLE IF NOT EXISTS "quiz_question" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"quiz_id" uuid NOT NULL,
 	"question_text" text NOT NULL,
@@ -179,7 +179,7 @@ CREATE TABLE "quiz_question" (
 	"created_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "user_vocabulary_progress" (
+CREATE TABLE IF NOT EXISTS "user_vocabulary_progress" (
 	"user_id" text NOT NULL,
 	"vocabulary_id" uuid NOT NULL,
 	"mastery_level" integer DEFAULT 0 NOT NULL,
@@ -188,7 +188,7 @@ CREATE TABLE "user_vocabulary_progress" (
 	"updated_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "vocabulary_item" (
+CREATE TABLE IF NOT EXISTS "vocabulary_item" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"language_code" text NOT NULL,
 	"difficulty_level" "difficulty_level" NOT NULL,
@@ -200,7 +200,7 @@ CREATE TABLE "vocabulary_item" (
 	"created_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "voice_session" (
+CREATE TABLE IF NOT EXISTS "voice_session" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"user_id" text NOT NULL,
 	"started_at" timestamp DEFAULT now() NOT NULL,
@@ -210,7 +210,7 @@ CREATE TABLE "voice_session" (
 	"language_code" text NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "voice_usage_daily" (
+CREATE TABLE IF NOT EXISTS "voice_usage_daily" (
 	"user_id" text NOT NULL,
 	"usage_date" text NOT NULL,
 	"seconds_used" integer DEFAULT 0 NOT NULL,
@@ -218,24 +218,44 @@ CREATE TABLE "voice_usage_daily" (
 	"session_count" integer DEFAULT 0 NOT NULL
 );
 --> statement-breakpoint
-ALTER TABLE "account" ADD CONSTRAINT "account_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "session" ADD CONSTRAINT "session_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "posts" ADD CONSTRAINT "posts_author_id_user_id_fk" FOREIGN KEY ("author_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "conversation_message" ADD CONSTRAINT "conversation_message_session_id_conversation_session_id_fk" FOREIGN KEY ("session_id") REFERENCES "public"."conversation_session"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "conversation_session" ADD CONSTRAINT "conversation_session_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "free_subscription_status" ADD CONSTRAINT "free_subscription_status_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "user_usage_daily" ADD CONSTRAINT "user_usage_daily_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "user_usage_monthly" ADD CONSTRAINT "user_usage_monthly_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "paid_ai_session" ADD CONSTRAINT "paid_ai_session_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "paid_ai_usage" ADD CONSTRAINT "paid_ai_usage_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "paid_ai_usage" ADD CONSTRAINT "paid_ai_usage_session_id_paid_ai_session_id_fk" FOREIGN KEY ("session_id") REFERENCES "public"."paid_ai_session"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "favorite_item" ADD CONSTRAINT "favorite_item_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "practice_recording" ADD CONSTRAINT "practice_recording_session_id_practice_session_id_fk" FOREIGN KEY ("session_id") REFERENCES "public"."practice_session"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "practice_session" ADD CONSTRAINT "practice_session_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "quiz_attempt" ADD CONSTRAINT "quiz_attempt_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "quiz_attempt" ADD CONSTRAINT "quiz_attempt_quiz_id_quiz_id_fk" FOREIGN KEY ("quiz_id") REFERENCES "public"."quiz"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "quiz_question" ADD CONSTRAINT "quiz_question_quiz_id_quiz_id_fk" FOREIGN KEY ("quiz_id") REFERENCES "public"."quiz"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "user_vocabulary_progress" ADD CONSTRAINT "user_vocabulary_progress_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "user_vocabulary_progress" ADD CONSTRAINT "user_vocabulary_progress_vocabulary_id_vocabulary_item_id_fk" FOREIGN KEY ("vocabulary_id") REFERENCES "public"."vocabulary_item"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "voice_session" ADD CONSTRAINT "voice_session_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "voice_usage_daily" ADD CONSTRAINT "voice_usage_daily_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;
+DO $$ BEGIN ALTER TABLE "account" ADD CONSTRAINT "account_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+--> statement-breakpoint
+DO $$ BEGIN ALTER TABLE "session" ADD CONSTRAINT "session_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+--> statement-breakpoint
+DO $$ BEGIN ALTER TABLE "posts" ADD CONSTRAINT "posts_author_id_user_id_fk" FOREIGN KEY ("author_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+--> statement-breakpoint
+DO $$ BEGIN ALTER TABLE "conversation_message" ADD CONSTRAINT "conversation_message_session_id_conversation_session_id_fk" FOREIGN KEY ("session_id") REFERENCES "public"."conversation_session"("id") ON DELETE cascade ON UPDATE no action; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+--> statement-breakpoint
+DO $$ BEGIN ALTER TABLE "conversation_session" ADD CONSTRAINT "conversation_session_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+--> statement-breakpoint
+DO $$ BEGIN ALTER TABLE "free_subscription_status" ADD CONSTRAINT "free_subscription_status_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+--> statement-breakpoint
+DO $$ BEGIN ALTER TABLE "user_usage_daily" ADD CONSTRAINT "user_usage_daily_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+--> statement-breakpoint
+DO $$ BEGIN ALTER TABLE "user_usage_monthly" ADD CONSTRAINT "user_usage_monthly_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+--> statement-breakpoint
+DO $$ BEGIN ALTER TABLE "paid_ai_session" ADD CONSTRAINT "paid_ai_session_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+--> statement-breakpoint
+DO $$ BEGIN ALTER TABLE "paid_ai_usage" ADD CONSTRAINT "paid_ai_usage_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+--> statement-breakpoint
+DO $$ BEGIN ALTER TABLE "paid_ai_usage" ADD CONSTRAINT "paid_ai_usage_session_id_paid_ai_session_id_fk" FOREIGN KEY ("session_id") REFERENCES "public"."paid_ai_session"("id") ON DELETE set null ON UPDATE no action; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+--> statement-breakpoint
+DO $$ BEGIN ALTER TABLE "favorite_item" ADD CONSTRAINT "favorite_item_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+--> statement-breakpoint
+DO $$ BEGIN ALTER TABLE "practice_recording" ADD CONSTRAINT "practice_recording_session_id_practice_session_id_fk" FOREIGN KEY ("session_id") REFERENCES "public"."practice_session"("id") ON DELETE cascade ON UPDATE no action; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+--> statement-breakpoint
+DO $$ BEGIN ALTER TABLE "practice_session" ADD CONSTRAINT "practice_session_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+--> statement-breakpoint
+DO $$ BEGIN ALTER TABLE "quiz_attempt" ADD CONSTRAINT "quiz_attempt_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+--> statement-breakpoint
+DO $$ BEGIN ALTER TABLE "quiz_attempt" ADD CONSTRAINT "quiz_attempt_quiz_id_quiz_id_fk" FOREIGN KEY ("quiz_id") REFERENCES "public"."quiz"("id") ON DELETE cascade ON UPDATE no action; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+--> statement-breakpoint
+DO $$ BEGIN ALTER TABLE "quiz_question" ADD CONSTRAINT "quiz_question_quiz_id_quiz_id_fk" FOREIGN KEY ("quiz_id") REFERENCES "public"."quiz"("id") ON DELETE cascade ON UPDATE no action; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+--> statement-breakpoint
+DO $$ BEGIN ALTER TABLE "user_vocabulary_progress" ADD CONSTRAINT "user_vocabulary_progress_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+--> statement-breakpoint
+DO $$ BEGIN ALTER TABLE "user_vocabulary_progress" ADD CONSTRAINT "user_vocabulary_progress_vocabulary_id_vocabulary_item_id_fk" FOREIGN KEY ("vocabulary_id") REFERENCES "public"."vocabulary_item"("id") ON DELETE cascade ON UPDATE no action; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+--> statement-breakpoint
+DO $$ BEGIN ALTER TABLE "voice_session" ADD CONSTRAINT "voice_session_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+--> statement-breakpoint
+DO $$ BEGIN ALTER TABLE "voice_usage_daily" ADD CONSTRAINT "voice_usage_daily_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
