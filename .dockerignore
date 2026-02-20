@@ -1,39 +1,26 @@
-# Dependencies
+# Dependencies and build artifacts
 node_modules
+dist
+.git
+.gitignore
 
-# Development
+# Env and secrets
 .env
 .env.*
 !.env.example
 
-# Build artifacts
-dist
-*.log
-*.tsbuildinfo
-
-# Git
-.git
-.gitignore
-
-# IDE
-.vscode
-.idea
-*.swp
-*.swo
-
-# Documentation
-README.md
-plan
-
-# CI/CD
-.github
-
-# Tests
-*.test.ts
-*.spec.ts
-__tests__
+# Tests and tooling
+tests
 coverage
+*.log
+.cursor
+.idea
+.vscode
 
-# OS
-.DS_Store
-Thumbs.db
+# Docs and misc
+*.md
+!DEPLOY.md
+.biome*
+docker-compose*.yml
+Dockerfile*
+.dockerignore
