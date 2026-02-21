@@ -1,5 +1,6 @@
 import { env } from '@common/config/env';
 import { cors } from '@elysiajs/cors';
+import { jwt } from '@elysiajs/jwt';
 import { swagger } from '@elysiajs/swagger';
 import { authModule } from '@modules/auth';
 import { healthModule } from '@modules/health';
@@ -34,6 +35,13 @@ export const createApp = () => {
 				credentials: true,
 			}),
 		)
+		.use(
+			jwt({
+				name: 'jwt',
+				secret: env.JWT_SECRET!,
+				exp: '7d',
+			}),
+		)
 		// ---  API Documentation (open at /docs) ---
 		.use(
 			swagger({
@@ -44,10 +52,9 @@ export const createApp = () => {
 						version: '1.0.0',
 						description:
 							'Language learning API: vocabulary, progress, practice, quizzes, and AI chat.\n\n' +
-							'**Getting started:** Use `POST /api/auth/sign-in/email` to sign in (or sign up with `POST /api/auth/sign-up/email`). ' +
-							'Protected routes require the session cookie. Call sign-in from this docs page (same origin) so the cookie is stored and sent automatically on later requests. ' +
-							'Request bodies in the Scalar client are prefilled with realistic default JSON for quick testing.\n\n' +
-							'Auth: [Better Auth](https://better-auth.com)',
+							'**Auth (JWT):** Call **POST /api/auth/login** with `{ "email", "password" }` to get **{ "token": "ey..." }**. ' +
+							'Send **Authorization: Bearer &lt;token&gt;** on all protected routes. No cookie or session; JWT only (@elysiajs/jwt). Sign-up: POST /api/auth/sign-up/email.\n\n' +
+							'Request bodies are prefilled with realistic default JSON.',
 					},
 					tags: [
 						{ name: 'Health', description: 'Liveness and readiness checks' },

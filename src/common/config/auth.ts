@@ -5,9 +5,9 @@ import { sendEmail } from './email';
 import { env } from './env';
 
 /**
- * Better Auth configuration
- * Defines authentication methods, session behavior, and database integration
- * Review security defaults before production deployment
+ * Better Auth: sign-up, sign-in (email + social), password reset, sessions.
+ * Used only for login flows (and social OAuth). API auth uses @elysiajs/jwt:
+ * after sign-in, call GET /api/auth/jwt to exchange session for a JWT.
  */
 export const auth = betterAuth({
 	database: drizzleAdapter(db, {
@@ -85,14 +85,7 @@ export const auth = betterAuth({
 	secret: env.BETTER_AUTH_SECRET!,
 	baseURL: env.BETTER_AUTH_URL,
 	advanced: {
-		// Secure cookie defaults (adjust if deploying behind a reverse proxy)
 		cookiePrefix: 'auth',
 		useSecureCookies: env.NODE_ENV === 'production',
-		defaultCookieAttributes: {
-			sameSite: 'lax',
-			httpOnly: true,
-			secure: env.NODE_ENV === 'production',
-			path: '/',
-		},
 	},
 });

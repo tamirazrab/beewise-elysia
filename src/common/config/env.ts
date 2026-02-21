@@ -54,6 +54,13 @@ const EnvSchema = Type.Object({
 			pattern: '^https?://.+',
 		}),
 	),
+	JWT_SECRET: Type.Optional(
+		Type.String({
+			minLength: 1,
+			description: 'Secret for @elysiajs/jwt (defaults to BETTER_AUTH_SECRET)',
+			default: '',
+		}),
+	),
 
 	// Logging
 	LOG_LEVEL: Type.Union(
@@ -246,6 +253,10 @@ export function validateEnv(): Env {
 		REQUIRE_EMAIL_VERIFICATION: process.env['REQUIRE_EMAIL_VERIFICATION'] === 'true',
 		BETTER_AUTH_SECRET: process.env['BETTER_AUTH_SECRET'] || 'development-secret-min-32-characters-long',
 		BETTER_AUTH_URL: process.env['BETTER_AUTH_URL'] || 'http://localhost:3000',
+		JWT_SECRET:
+			process.env['JWT_SECRET'] ||
+			process.env['BETTER_AUTH_SECRET'] ||
+			'development-secret-min-32-characters-long',
 		LOG_LEVEL: process.env['LOG_LEVEL'] || 'info',
 		CORS_ORIGIN: corsOriginArray,
 		RESEND_API_KEY: process.env['RESEND_API_KEY'] ?? '',

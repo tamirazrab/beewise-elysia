@@ -1,29 +1,167 @@
 import { auth } from '@common/config/auth';
-import { Elysia } from 'elysia';
+import { db } from '@common/db';
+import { account, user } from '@common/db/schema/auth';
+import { hashPassword, verifyPassword } from 'better-auth/crypto';
+import { and, eq } from 'drizzle-orm';
+import { Elysia, t } from 'elysia';
+
+const MIN_PASSWORD_LENGTH = 8;
+const MAX_PASSWORD_LENGTH = 128;
 
 /**
- * Authentication routes powered by Better Auth.
- *
- * You typically do not need to modify this file.
- * Customize auth behavior via Better Auth configuration instead.
- *
- * @see https://better-auth.com/docs
+ * Auth routes: register/login return JWT + user; sign-up and social via Better Auth.
  */
 
+const loginBody = t.Object({
+	email: t.String({ format: 'email' }),
+	password: t.String({ minLength: 1 }),
+});
+
+const registerBody = t.Object({
+	email: t.String({ format: 'email' }),
+	password: t.String({ minLength: MIN_PASSWORD_LENGTH, maxLength: MAX_PASSWORD_LENGTH }),
+	name: t.String({ minLength: 1 }),
+	image: t.Optional(t.String()),
+});
+
 export const authModule = new Elysia({ prefix: '/api/auth' })
-	// Sign Up with Email
+	// Login: email + password → JWT (no cookie/session). Use this token as Authorization: Bearer <token>.
+	.post(
+		'/login',
+		async ({ body, jwt, set }) => {
+			const [foundUser] = await db
+				.select()
+				.from(user)
+				.where(eq(user.email, body.email))
+				.limit(1);
+			if (!foundUser) {
+				set.status = 401;
+				return { error: 'Unauthorized', message: 'Invalid email or password' };
+			}
+			const [credentialAccount] = await db
+				.select({ password: account.password })
+				.from(account)
+				.where(and(eq(account.userId, foundUser.id), eq(account.providerId, 'credential')))
+				.limit(1);
+			const passwordHash = credentialAccount?.password;
+			if (!passwordHash) {
+				set.status = 401;
+				return { error: 'Unauthorized', message: 'Invalid email or password' };
+			}
+			try {
+				const valid = await verifyPassword({ password: body.password, hash: passwordHash });
+				if (!valid) {
+					set.status = 401;
+					return { error: 'Unauthorized', message: 'Invalid email or password' };
+				}
+			} catch {
+				set.status = 401;
+				return { error: 'Unauthorized', message: 'Invalid email or password' };
+			}
+			const token = await jwt.sign({
+				sub: foundUser.id,
+				email: foundUser.email,
+				role: foundUser.role ?? undefined,
+			});
+			const userResponse = {
+				id: foundUser.id,
+				name: foundUser.name,
+				email: foundUser.email,
+				image: foundUser.image ?? null,
+				emailVerified: foundUser.emailVerified,
+				role: foundUser.role ?? null,
+			};
+			return { token, user: userResponse };
+		},
+		{
+			body: loginBody,
+			detail: {
+				tags: ['Auth'],
+				summary: 'Login (get JWT)',
+				description:
+					'Authenticate with email and password. Returns **{ "token", "user" }**. No cookie or session. ' +
+					'Use the token as **Authorization: Bearer &lt;token&gt;** on all protected routes.',
+				requestBody: {
+					content: {
+						'application/json': {
+							example: { email: 'alice@example.com', password: 'SecurePass123!' },
+						},
+					},
+				},
+			},
+		},
+	)
+	// Register: create user + credential account, return JWT + user (same as login response).
+	.post(
+		'/register',
+		async ({ body, jwt, set }) => {
+			const emailLower = body.email.toLowerCase().trim();
+			const [existing] = await db.select({ id: user.id }).from(user).where(eq(user.email, emailLower)).limit(1);
+			if (existing) {
+				set.status = 422;
+				return { error: 'Unprocessable Entity', message: 'User already exists with this email' };
+			}
+			const userId = globalThis.crypto.randomUUID();
+			const accountId = globalThis.crypto.randomUUID();
+			const passwordHash = await hashPassword(body.password);
+			await db.insert(user).values({
+				id: userId,
+				name: body.name.trim(),
+				email: emailLower,
+				emailVerified: false,
+				image: body.image ?? null,
+				role: 'user',
+			});
+			await db.insert(account).values({
+				id: accountId,
+				accountId: userId,
+				providerId: 'credential',
+				userId,
+				password: passwordHash,
+			});
+			const token = await jwt.sign({
+				sub: userId,
+				email: emailLower,
+				role: 'user',
+			});
+			const userResponse = {
+				id: userId,
+				name: body.name.trim(),
+				email: emailLower,
+				image: body.image ?? null,
+				emailVerified: false,
+				role: 'user' as string | null,
+			};
+			return { token, user: userResponse };
+		},
+		{
+			body: registerBody,
+			detail: {
+				tags: ['Auth'],
+				summary: 'Register (get JWT)',
+				description:
+					'Create a new user. Returns **{ "token", "user" }** (same as login). No cookie or session. Use the token as **Authorization: Bearer &lt;token&gt;** on protected routes.',
+				requestBody: {
+					content: {
+						'application/json': {
+							example: {
+								email: 'alice@example.com',
+								password: 'SecurePass123!',
+								name: 'Alice Smith',
+							},
+						},
+					},
+				},
+			},
+		},
+	)
+	// Sign Up with Email (Better Auth – alternative; for JWT use POST /api/auth/register)
 	.post('/sign-up/email', ({ request }) => auth.handler(request), {
 		detail: {
 			tags: ['Auth'],
-			summary: 'Register with email',
+			summary: 'Register with email (Better Auth)',
 			description:
-				'Register a new user. Requires email, password, and name.\n\n' +
-				'**Request Body (JSON):**\n' +
-				'- `email` (string, required)\n' +
-				'- `password` (string, required)\n' +
-				'- `name` (string, required)\n' +
-				'- `image` (string, optional)\n' +
-				'- `callbackURL` (string, optional)',
+				'Better Auth sign-up (session/cookie). For JWT response use **POST /api/auth/register** instead.',
 			requestBody: {
 				content: {
 					'application/json': {
@@ -38,13 +176,12 @@ export const authModule = new Elysia({ prefix: '/api/auth' })
 			},
 		},
 	})
-	// Sign In with Email
+	// Sign In with Email (Better Auth – optional; for web/social. API consumers use POST /login.)
 	.post('/sign-in/email', ({ request }) => auth.handler(request), {
 		detail: {
 			tags: ['Auth'],
-			summary: 'Login with email',
-			description:
-				'Authenticate and start a session using email and password. On success, the response sets a session cookie; use the same origin (e.g. /docs on this host) when calling protected routes so the cookie is sent.',
+			summary: 'Sign in with email (Better Auth session)',
+			description: 'Creates a session (cookie). For API consumers use **POST /api/auth/login** instead to get a JWT directly.',
 			requestBody: {
 				content: {
 					'application/json': {
@@ -58,22 +195,20 @@ export const authModule = new Elysia({ prefix: '/api/auth' })
 			},
 		},
 	})
-	// Sign Out
+	// Sign Out (Better Auth session)
 	.post('/sign-out', ({ request }) => auth.handler(request), {
 		detail: {
 			tags: ['Auth'],
-			summary: 'Logout',
-			description: 'End the current user session. Requires active session cookie.',
+			summary: 'Sign out (clear session cookie)',
+			description: 'Only relevant when using Better Auth session (sign-in).',
 		},
 	})
-	// Get Session
+	// Get Session (Better Auth – cookie)
 	.get('/get-session', ({ request }) => auth.handler(request), {
 		detail: {
 			tags: ['Auth'],
 			summary: 'Get current session',
-			description:
-				"Retrieve the authenticated user's session information.\n\n" +
-				'Returns user data and session details if authenticated, or null if not authenticated.',
+			description: 'Returns user/session if request has a valid session cookie. For API use JWT from POST /login.',
 		},
 	})
 	// Request Password Reset
