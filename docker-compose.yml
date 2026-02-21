@@ -1,17 +1,19 @@
-# Coolify-friendly: use ${VAR} or ${VAR:-default} in Coolify UI for overrides
 services:
   postgres:
     image: postgres:17-alpine
-    container_name: elysia-postgres
+    container_name: beewise-postgres
     restart: unless-stopped
+    env_file: .env
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB:-elysia_db}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    networks:
+      - backend
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -22,14 +24,14 @@ services:
       dockerfile: Dockerfile
     container_name: elysia-app
     restart: unless-stopped
+    env_file: .env
     ports:
       - "${PORT:-3000}:3000"
     environment:
       NODE_ENV: production
       HOST: 0.0.0.0
       PORT: 3000
-      # Set DATABASE_URL explicitly in Coolify if you override POSTGRES_PASSWORD/POSTGRES_DB
-      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@postgres:5432/elysia_db}
+      DATABASE_URL: ${DATABASE_URL}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-your-random-secret-here}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000,http://localhost:5173}
@@ -37,12 +39,18 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    networks:
+      - backend
     healthcheck:
       test: ["CMD-SHELL", "bun -e \"fetch('http://localhost:3000/health').then(r => r.ok ? process.exit(0) : process.exit(1))\""]
       interval: 15s
       timeout: 5s
       retries: 3
       start_period: 30s
+
+networks:
+  backend:
+    driver: bridge
 
 volumes:
   postgres_data:
