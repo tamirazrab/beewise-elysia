@@ -21,18 +21,16 @@ export function withAdmin<T extends Elysia<any, any, any, any, any, any, any>>(a
 						};
 					}
 
-					// Check if user has admin privileges
-					// Note: You may need to extend Better Auth user schema to include isAdmin
-					// For now, checking a custom property or role
-					const isAdmin = (user as any).isAdmin === true || (user as any).role === 'admin';
-
-					if (!isAdmin) {
-						set.status = 403;
-						return {
-							error: 'Forbidden',
-							message: 'Admin access required',
-						};
-					}
+					// TEMPORARY: Admin role check disabled – any authenticated user can access admin routes.
+					// Uncomment below to re-enforce admin-only access.
+					// const isAdmin = (user as any).isAdmin === true || (user as any).role === 'admin';
+					// if (!isAdmin) {
+					// 	set.status = 403;
+					// 	return {
+					// 		error: 'Forbidden',
+					// 		message: 'Admin access required',
+					// 	};
+					// }
 				},
 			};
 		},
