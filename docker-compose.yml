@@ -1,23 +1,6 @@
+# Backend API only. Database is external (e.g. Supabase).
+# Set DATABASE_URL in .env to your Postgres connection string (Supabase pooler recommended).
 services:
-  postgres:
-    image: postgres:17-alpine
-    container_name: beewise-postgres
-    restart: unless-stopped
-    env_file: .env
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB:-elysia_db}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    networks:
-      - backend
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-
   app:
     build:
       context: .
@@ -36,22 +19,11 @@ services:
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
       CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000,http://localhost:5173}
       LOG_LEVEL: ${LOG_LEVEL:-info}
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - backend
+      RUN_MIGRATIONS: ${RUN_MIGRATIONS:-true}
+      RUN_SEED: ${RUN_SEED:-false}
     healthcheck:
       test: ["CMD-SHELL", "bun -e \"fetch('http://localhost:3000/health').then(r => r.ok ? process.exit(0) : process.exit(1))\""]
       interval: 15s
       timeout: 5s
       retries: 3
       start_period: 30s
-
-networks:
-  backend:
-    driver: bridge
-
-volumes:
-  postgres_data:
-    driver: local

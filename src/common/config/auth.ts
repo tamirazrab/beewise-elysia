@@ -21,7 +21,7 @@ export const auth = betterAuth({
 			},
 		},
 	},
-	trustedOrigins: ['http://127.0.0.1:3000', 'http://localhost:3000', 'http://iooksgoswo48kogoksc0s4c4.16.16.227.107.sslip.io:3000', 'http://iooksgoswo48kogoksc0s4c4.16.16.227.107.sslip.io'],
+	trustedOrigins: env.CORS_ORIGIN,
 	emailAndPassword: {
 		enabled: true,
 		minPasswordLength: 8,

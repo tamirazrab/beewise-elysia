@@ -149,7 +149,6 @@ export const vocabularyModule = withAdmin(
 			};
 		},
 		{
-			auth: true,
 			query: t.Object({
 				languageCode: t.Optional(t.String()),
 				difficultyLevel: t.Optional(difficultyLevelEnum),
@@ -197,7 +196,6 @@ export const vocabularyModule = withAdmin(
 			return { items };
 		},
 		{
-			auth: true,
 			query: t.Object({
 				query: t.String({ minLength: 1 }),
 				languageCode: t.Optional(t.String()),
@@ -228,7 +226,6 @@ export const vocabularyModule = withAdmin(
 			return { data: item };
 		},
 		{
-			auth: true,
 			params: t.Object({
 				id: t.String({ format: 'uuid' }),
 			}),

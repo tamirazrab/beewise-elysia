@@ -1,6 +1,8 @@
+import { SignJWT, jwtVerify } from 'jose';
 import { db } from '@common/db';
 import { voiceUsageDaily, voiceSession } from '@common/db/schema';
 import { eq, and, isNull, sql, desc } from 'drizzle-orm';
+import { env } from '@common/config/env';
 
 /**
  * Voice Chat Service
@@ -71,12 +73,60 @@ export async function checkDailyBudget(additionalCostUsd: number): Promise<Voice
 	return { allowed: true };
 }
 
+export interface VoiceSessionTokenPayload {
+	sub: string;
+	sessionId: string;
+}
+
+export async function createSessionToken(userId: string, sessionId: string): Promise<string> {
+	const secretStr =
+		env.JWT_SECRET || (env as { BETTER_AUTH_SECRET?: string }).BETTER_AUTH_SECRET || 'development-secret-min-32-characters-long';
+	const secret = new TextEncoder().encode(secretStr);
+	const expSec = env.VOICE_WS_TOKEN_EXPIRY_SEC ?? 300;
+	return new SignJWT({ sessionId })
+		.setSubject(userId)
+		.setProtectedHeader({ alg: 'HS256' })
+		.setIssuedAt()
+		.setExpirationTime(`${expSec}s`)
+		.sign(secret);
+}
+
+export async function validateSessionToken(
+	token: string,
+): Promise<VoiceSessionTokenPayload | null> {
+	try {
+		const secretStr =
+			env.JWT_SECRET || (env as { BETTER_AUTH_SECRET?: string }).BETTER_AUTH_SECRET || 'development-secret-min-32-characters-long';
+		const secret = new TextEncoder().encode(secretStr);
+		const { payload } = await jwtVerify(token, secret);
+		const sub = payload.sub;
+		const sessionId = (payload as { sessionId?: string }).sessionId;
+		if (typeof sub !== 'string' || typeof sessionId !== 'string') return null;
+		return { sub, sessionId };
+	} catch {
+		return null;
+	}
+}
+
 export async function getActiveVoiceSession(userId: string): Promise<{ id: string } | null> {
 	const [result] = await db
 		.select({ id: voiceSession.id })
 		.from(voiceSession)
 		.where(and(eq(voiceSession.userId, userId), isNull(voiceSession.endedAt)))
 		.orderBy(desc(voiceSession.startedAt))
+		.limit(1);
+
+	return result || null;
+}
+
+export async function getVoiceSessionByIdAndUser(
+	sessionId: string,
+	userId: string,
+): Promise<{ id: string; languageCode: string } | null> {
+	const [result] = await db
+		.select({ id: voiceSession.id, languageCode: voiceSession.languageCode })
+		.from(voiceSession)
+		.where(and(eq(voiceSession.id, sessionId), eq(voiceSession.userId, userId), isNull(voiceSession.endedAt)))
 		.limit(1);
 
 	return result || null;

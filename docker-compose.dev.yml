@@ -1,0 +1,35 @@
+# Optional: local development with a Postgres container.
+# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+# Set DATABASE_URL=postgresql://postgres:YOUR_PASSWORD@localhost:5432/elysia_db (host) or
+#   use service name when app runs in Docker: postgresql://postgres:YOUR_PASSWORD@postgres:5432/elysia_db
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: beewise-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-elysia_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data_dev:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"${POSTGRES_USER:-postgres}\" -d \"${POSTGRES_DB:-elysia_db}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-elysia_db}
+      RUN_SEED: "true"
+
+volumes:
+  postgres_data_dev:
+    driver: local

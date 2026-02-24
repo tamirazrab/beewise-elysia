@@ -2,13 +2,19 @@
 set -e
 cd /app
 
-bun run 
+if [ "${RUN_MIGRATIONS:-true}" = "true" ]; then
+  echo "[entrypoint] Running migrations..."
+  bun run src/scripts/migrate.ts
+else
+  echo "[entrypoint] Skipping migrations (RUN_MIGRATIONS=false)"
+fi
 
-echo "[entrypoint] Running migrations..."
-bun run src/scripts/migrate.ts
-
-echo "[entrypoint] Seeding database..."
-bun run src/scripts/seed.ts
+if [ "${RUN_SEED:-false}" = "true" ]; then
+  echo "[entrypoint] Seeding database..."
+  bun run src/scripts/seed.ts
+else
+  echo "[entrypoint] Skipping seed (RUN_SEED=false)"
+fi
 
 echo "[entrypoint] Starting app..."
 exec "$@"

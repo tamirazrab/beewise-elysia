@@ -4,6 +4,7 @@ import { db } from '@common/db';
 import { voiceSession } from '@common/db/schema';
 import { eq, and, isNull } from 'drizzle-orm';
 import * as service from './service';
+import * as streamService from './stream-service';
 
 const SUPPORTED_LANGUAGE_CODES = new Set([
 	'en', 'es', 'zh', 'fr', 'ar', 'de', 'ja', 'pt', 'ko', 'hi', 'ur', 'bn',
@@ -45,10 +46,10 @@ export const voiceChatModule = withAuth(new Elysia({ prefix: '/api/voice' }))
 		},
 	)
 
-	// POST /api/voice/session - Bidirectional streaming endpoint
+	// POST /api/voice/session - Create session and return WebSocket URL + token
 	.post(
 		'/session',
-		async ({ body, user, set }: any) => {
+		async ({ body, user, set, request }: any) => {
 			if (!user) {
 				set.status = 401;
 				return { error: 'Unauthorized', message: 'Please login first' };
@@ -94,13 +95,22 @@ export const voiceChatModule = withAuth(new Elysia({ prefix: '/api/voice' }))
 				return { error: 'Internal Server Error', message: 'Failed to create voice session' };
 			}
 
-			// TODO: Implement bidirectional streaming with Nova Sonic
-			// For now, return a placeholder response
-			set.status = 501;
+			const token = await service.createSessionToken(user.id, session.id);
+
+			// Build WebSocket URL from request origin (http->ws, https->wss)
+			let baseUrl: string;
+			try {
+				const url = new URL(request.url);
+				baseUrl = (url.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + url.host;
+			} catch {
+				baseUrl = 'ws://localhost:3000';
+			}
+			const wsUrl = `${baseUrl}/api/voice/stream?token=${encodeURIComponent(token)}`;
+
 			return {
-				error: 'Not Implemented',
-				message: 'Voice streaming is not yet implemented. This requires WebSocket/bidirectional streaming support.',
 				sessionId: session.id,
+				wsUrl,
+				token,
 			};
 		},
 		{
@@ -116,7 +126,8 @@ export const voiceChatModule = withAuth(new Elysia({ prefix: '/api/voice' }))
 			detail: {
 				tags: ['Voice Chat'],
 				summary: 'Start voice session',
-				description: 'Authenticated. Start a voice chat session. Optional body prefilled with example. Streaming not yet implemented.',
+				description:
+					'Authenticated. Create a voice session and get WebSocket URL + token. Connect to wsUrl with the token to stream audio.',
 				requestBody: {
 					content: {
 						'application/json': {
@@ -124,6 +135,122 @@ export const voiceChatModule = withAuth(new Elysia({ prefix: '/api/voice' }))
 						},
 					},
 				},
+			},
+		},
+	)
+
+	// WebSocket /api/voice/stream - Bidirectional voice streaming (token auth via query)
+	.ws(
+		'/stream',
+		{
+			query: t.Object({
+				token: t.String({ description: 'Short-lived JWT from POST /session' }),
+			}),
+			open: async (ws) => {
+				const token = (ws.data as { query?: { token?: string } })?.query?.token;
+				if (!token) {
+					ws.close(1008, 'Missing token');
+					return;
+				}
+
+				const payload = await service.validateSessionToken(token);
+				if (!payload) {
+					ws.close(1008, 'Invalid or expired token');
+					return;
+				}
+
+				const session = await service.getVoiceSessionByIdAndUser(payload.sessionId, payload.sub);
+				if (!session) {
+					ws.close(1008, 'Session not found or already ended');
+					return;
+				}
+
+				const userId = payload.sub;
+				const sessionId = session.id;
+				const languageCode = session.languageCode;
+				const startedAt = Date.now();
+
+				let audioQueue: streamService.AudioQueue | null = null;
+
+				audioQueue = await streamService.runBedrockVoiceStream({
+					userId,
+					sessionId,
+					languageCode,
+					onOutput: (event) => {
+						try {
+							ws.send(JSON.stringify(event));
+						} catch (err) {
+							// Client may have disconnected
+						}
+					},
+					onError: (err) => {
+						try {
+							ws.send(JSON.stringify({ error: err.message }));
+						} catch {}
+					},
+					onEnd: () => {
+						// Stream ended
+					},
+				});
+
+				// Store audioQueue and session info on ws for message/close handlers
+				(ws.data as Record<string, unknown>).audioQueue = audioQueue;
+				(ws.data as Record<string, unknown>).sessionInfo = {
+					userId,
+					sessionId,
+					languageCode,
+					startedAt,
+				};
+			},
+			message: async (ws, message) => {
+				const audioQueue = (ws.data as Record<string, unknown>).audioQueue as
+					| streamService.AudioQueue
+					| undefined;
+				if (!audioQueue) return;
+
+				let base64: string | null = null;
+				if (typeof message === 'string') {
+					try {
+						const parsed = JSON.parse(message) as { audio?: string };
+						base64 = parsed.audio ?? null;
+					} catch {
+						base64 = message; // Assume raw base64
+					}
+				}
+				if (base64) {
+					audioQueue.push(base64);
+				}
+			},
+			close: async (ws) => {
+				const sessionInfo = (ws.data as Record<string, unknown>).sessionInfo as
+					| { userId: string; sessionId: string; languageCode: string; startedAt: number }
+					| undefined;
+				const audioQueue = (ws.data as Record<string, unknown>).audioQueue as
+					| streamService.AudioQueue
+					| undefined;
+
+				if (audioQueue) audioQueue.close();
+
+				if (sessionInfo) {
+					const secondsUsed = Math.round((Date.now() - sessionInfo.startedAt) / 1000);
+					const costEstimateUsd =
+						(secondsUsed / 60) * service.VOICE_LIMITS.COST_PER_MINUTE_USD;
+					await service.recordVoiceSession(
+						sessionInfo.userId,
+						sessionInfo.sessionId,
+						secondsUsed,
+						costEstimateUsd,
+						sessionInfo.languageCode,
+					);
+				}
+			},
+		},
+		{
+			detail: {
+				tags: ['Voice Chat'],
+				summary: 'Voice stream WebSocket',
+				description:
+					'Connect with ?token=<jwt>. Token from POST /session. Send JSON { audio: "<base64>" } for PCM audio (16kHz, 16-bit, mono).',
 			},
 		},
 	);

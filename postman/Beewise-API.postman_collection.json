@@ -1,0 +1,544 @@
+{
+	"info": {
+		"name": "Beewise API",
+		"description": "1. Run **POST /api/auth/register** or **POST /api/auth/login** to get `{ \"token\", \"user\" }`.\n2. Set collection variable **bearer_token** to the token. Protected requests use Authorization: Bearer.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"auth": {
+		"type": "bearer",
+		"bearer": [{"key": "token", "value": "{{bearer_token}}", "type": "string"}]
+	},
+	"variable": [
+		{"key": "base_url", "value": "http://localhost:3000"},
+		{"key": "bearer_token", "value": ""},
+		{"key": "session_id", "value": "00000000-0000-0000-0000-000000000001"},
+		{"key": "vocabulary_id", "value": "00000000-0000-0000-0000-000000000001"},
+		{"key": "quiz_id", "value": "00000000-0000-0000-0000-000000000001"},
+		{"key": "recording_id", "value": "00000000-0000-0000-0000-000000000001"}
+	],
+	"item": [
+		{
+			"name": "Health",
+			"item": [
+				{
+					"name": "Health check",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": "{{base_url}}/health",
+						"description": "Liveness/readiness"
+					}
+				}
+			]
+		},
+		{
+			"name": "Auth",
+			"item": [
+				{
+					"name": "Login",
+					"request": {
+						"auth": {"type": "noauth"},
+						"method": "POST",
+						"header": [{"key": "Content-Type", "value": "application/json", "type": "text"}],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"alice@example.com\",\n  \"password\": \"SecurePass123!\"\n}"
+						},
+						"url": "{{base_url}}/api/auth/login",
+						"description": "Returns { token, user }. Set bearer_token from response."
+					}
+				},
+				{
+					"name": "Register",
+					"request": {
+						"auth": {"type": "noauth"},
+						"method": "POST",
+						"header": [{"key": "Content-Type", "value": "application/json", "type": "text"}],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"alice@example.com\",\n  \"password\": \"SecurePass123!\",\n  \"name\": \"Alice Smith\"\n}"
+						},
+						"url": "{{base_url}}/api/auth/register",
+						"description": "Returns { token, user }. Set bearer_token from response."
+					}
+				},
+				{
+					"name": "Sign up (Better Auth)",
+					"request": {
+						"auth": {"type": "noauth"},
+						"method": "POST",
+						"header": [{"key": "Content-Type", "value": "application/json", "type": "text"}],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"alice@example.com\",\n  \"password\": \"SecurePass123!\",\n  \"name\": \"Alice Smith\",\n  \"callbackURL\": \"/\"\n}"
+						},
+						"url": "{{base_url}}/api/auth/sign-up/email"
+					}
+				},
+				{
+					"name": "Sign in (Better Auth)",
+					"request": {
+						"auth": {"type": "noauth"},
+						"method": "POST",
+						"header": [{"key": "Content-Type", "value": "application/json", "type": "text"}],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"alice@example.com\",\n  \"password\": \"SecurePass123!\",\n  \"callbackURL\": \"/\"\n}"
+						},
+						"url": "{{base_url}}/api/auth/sign-in/email"
+					}
+				},
+				{
+					"name": "Sign out",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": "{{base_url}}/api/auth/sign-out"
+					}
+				},
+				{
+					"name": "Get session",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": "{{base_url}}/api/auth/get-session"
+					}
+				},
+				{
+					"name": "Request password reset",
+					"request": {
+						"auth": {"type": "noauth"},
+						"method": "POST",
+						"header": [{"key": "Content-Type", "value": "application/json", "type": "text"}],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"alice@example.com\",\n  \"redirectTo\": \"/reset-password\"\n}"
+						},
+						"url": "{{base_url}}/api/auth/request-password-reset"
+					}
+				},
+				{
+					"name": "Reset password",
+					"request": {
+						"auth": {"type": "noauth"},
+						"method": "POST",
+						"header": [{"key": "Content-Type", "value": "application/json", "type": "text"}],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"token\": \"your-reset-token-from-email\",\n  \"newPassword\": \"NewSecurePass456!\"\n}"
+						},
+						"url": "{{base_url}}/api/auth/reset-password"
+					}
+				}
+			]
+		},
+		{
+			"name": "Free AI Chat",
+			"item": [
+				{
+					"name": "Create session",
+					"request": {
+						"method": "POST",
+						"header": [{"key": "Content-Type", "value": "application/json", "type": "text"}],
+						"body": {"mode": "raw", "raw": "{\n  \"language_code\": \"es\"\n}"},
+						"url": "{{base_url}}/api/free/sessions"
+					}
+				},
+				{
+					"name": "List sessions",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": "{{base_url}}/api/free/sessions"
+					}
+				},
+				{
+					"name": "Get session",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": "{{base_url}}/api/free/{{session_id}}"
+					}
+				},
+				{
+					"name": "Close session",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": "{{base_url}}/api/free/{{session_id}}/close"
+					}
+				},
+				{
+					"name": "Delete session",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": "{{base_url}}/api/free/{{session_id}}"
+					}
+				},
+				{
+					"name": "Send message",
+					"request": {
+						"method": "POST",
+						"header": [{"key": "Content-Type", "value": "application/json", "type": "text"}],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"content\": \"How do I say 'I am learning Spanish' in Spanish?\"\n}"
+						},
+						"url": "{{base_url}}/api/free/{{session_id}}/messages"
+					}
+				},
+				{
+					"name": "Get messages",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": "{{base_url}}/api/free/{{session_id}}/messages"
+					}
+				}
+			]
+		},
+		{
+			"name": "Usage & Limits",
+			"item": [
+				{
+					"name": "Get daily usage",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": "{{base_url}}/api/usage/daily"
+					}
+				},
+				{
+					"name": "Get monthly usage",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": "{{base_url}}/api/usage/monthly"
+					}
+				},
+				{
+					"name": "Get limits",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": "{{base_url}}/api/limits/"
+					}
+				},
+				{
+					"name": "Get subscription status",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": "{{base_url}}/api/free/subscription/status"
+					}
+				}
+			]
+		},
+		{
+			"name": "Paid AI Chat",
+			"item": [
+				{
+					"name": "Create session",
+					"request": {
+						"method": "POST",
+						"header": [{"key": "Content-Type", "value": "application/json", "type": "text"}],
+						"body": {"mode": "raw", "raw": "{\n  \"language_code\": \"es\"\n}"},
+						"url": "{{base_url}}/api/paid/sessions"
+					}
+				},
+				{
+					"name": "Send message",
+					"request": {
+						"method": "POST",
+						"header": [{"key": "Content-Type", "value": "application/json", "type": "text"}],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"content\": \"What are some common Spanish greetings?\"\n}"
+						},
+						"url": "{{base_url}}/api/paid/{{session_id}}/messages"
+					}
+				},
+				{
+					"name": "Get session",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": "{{base_url}}/api/paid/{{session_id}}"
+					}
+				},
+				{
+					"name": "Get usage",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": "{{base_url}}/api/paid/usage"
+					}
+				}
+			]
+		},
+		{
+			"name": "Vocabulary",
+			"item": [
+				{
+					"name": "List vocabulary",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": "{{base_url}}/api/vocabulary/"
+					}
+				},
+				{
+					"name": "Search vocabulary",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": "{{base_url}}/api/vocabulary/search?q=hola"
+					}
+				},
+				{
+					"name": "Get vocabulary item",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": "{{base_url}}/api/vocabulary/{{vocabulary_id}}"
+					}
+				},
+				{
+					"name": "Create vocabulary (admin)",
+					"request": {
+						"method": "POST",
+						"header": [{"key": "Content-Type", "value": "application/json", "type": "text"}],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"languageCode\": \"es\",\n  \"difficultyLevel\": \"beginner\",\n  \"word\": \"hola\",\n  \"meaning\": \"hello\",\n  \"exampleSentence\": \"¡Hola! ¿Cómo estás?\"\n}"
+						},
+						"url": "{{base_url}}/api/vocabulary/"
+					}
+				},
+				{
+					"name": "Update vocabulary (admin)",
+					"request": {
+						"method": "PUT",
+						"header": [{"key": "Content-Type", "value": "application/json", "type": "text"}],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"meaning\": \"hello; hi\",\n  \"exampleSentence\": \"Hola, buenos días.\"\n}"
+						},
+						"url": "{{base_url}}/api/vocabulary/{{vocabulary_id}}"
+					}
+				},
+				{
+					"name": "Delete vocabulary (admin)",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": "{{base_url}}/api/vocabulary/{{vocabulary_id}}"
+					}
+				}
+			]
+		},
+		{
+			"name": "Progress",
+			"item": [
+				{
+					"name": "Get progress",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": "{{base_url}}/api/vocabulary/progress"
+					}
+				},
+				{
+					"name": "Update progress",
+					"request": {
+						"method": "PUT",
+						"header": [{"key": "Content-Type", "value": "application/json", "type": "text"}],
+						"body": {"mode": "raw", "raw": "{\n  \"masteryLevel\": 75\n}"},
+						"url": "{{base_url}}/api/vocabulary/progress/{{vocabulary_id}}"
+					}
+				},
+				{
+					"name": "Get review items",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": "{{base_url}}/api/vocabulary/progress/review"
+					}
+				}
+			]
+		},
+		{
+			"name": "Practice",
+			"item": [
+				{
+					"name": "Create practice session",
+					"request": {
+						"method": "POST",
+						"header": [{"key": "Content-Type", "value": "application/json", "type": "text"}],
+						"body": {"mode": "raw", "raw": "{\n  \"type\": \"speaking\",\n  \"languageCode\": \"es\"\n}"},
+						"url": "{{base_url}}/api/vocabulary/practice/sessions"
+					}
+				},
+				{
+					"name": "List practice sessions",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": "{{base_url}}/api/vocabulary/practice/sessions"
+					}
+				},
+				{
+					"name": "Get practice session",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": "{{base_url}}/api/vocabulary/practice/sessions/{{session_id}}"
+					}
+				},
+				{
+					"name": "Create recording",
+					"request": {
+						"method": "POST",
+						"header": [{"key": "Content-Type", "value": "application/json", "type": "text"}],
+						"body": {"mode": "raw", "raw": "{\n  \"durationSeconds\": 12\n}"},
+						"url": "{{base_url}}/api/vocabulary/practice/sessions/{{session_id}}/recordings"
+					}
+				},
+				{
+					"name": "List recordings",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": "{{base_url}}/api/vocabulary/practice/sessions/{{session_id}}/recordings"
+					}
+				},
+				{
+					"name": "Get recording",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": "{{base_url}}/api/vocabulary/practice/recordings/{{recording_id}}"
+					}
+				}
+			]
+		},
+		{
+			"name": "Quiz",
+			"item": [
+				{
+					"name": "List quizzes",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": "{{base_url}}/api/vocabulary/quizzes"
+					}
+				},
+				{
+					"name": "Get quiz",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": "{{base_url}}/api/vocabulary/quizzes/{{quiz_id}}"
+					}
+				},
+				{
+					"name": "Create quiz (admin)",
+					"request": {
+						"method": "POST",
+						"header": [{"key": "Content-Type", "value": "application/json", "type": "text"}],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"languageCode\": \"es\",\n  \"difficultyLevel\": \"beginner\",\n  \"questions\": [\n    {\n      \"questionText\": \"What does \\\"hola\\\" mean?\",\n      \"options\": [\"hello\", \"goodbye\", \"thanks\"],\n      \"correctIndex\": 0\n    }\n  ]\n}"
+						},
+						"url": "{{base_url}}/api/vocabulary/quizzes"
+					}
+				},
+				{
+					"name": "Generate quiz (admin)",
+					"request": {
+						"method": "POST",
+						"header": [{"key": "Content-Type", "value": "application/json", "type": "text"}],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"languageCode\": \"es\",\n  \"difficultyLevel\": \"beginner\",\n  \"numQuestions\": 10\n}"
+						},
+						"url": "{{base_url}}/api/vocabulary/quizzes/generate"
+					}
+				},
+				{
+					"name": "Submit quiz attempt",
+					"request": {
+						"method": "POST",
+						"header": [{"key": "Content-Type", "value": "application/json", "type": "text"}],
+						"body": {"mode": "raw", "raw": "{\n  \"answers\": [0, 1, 2]\n}"},
+						"url": "{{base_url}}/api/vocabulary/quizzes/{{quiz_id}}/attempts"
+					}
+				},
+				{
+					"name": "List quiz attempts",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": "{{base_url}}/api/vocabulary/quizzes/attempts"
+					}
+				}
+			]
+		},
+		{
+			"name": "Favorites",
+			"item": [
+				{
+					"name": "Add favorite",
+					"request": {
+						"method": "POST",
+						"header": [{"key": "Content-Type", "value": "application/json", "type": "text"}],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"itemType\": \"vocabulary\",\n  \"itemId\": \"00000000-0000-0000-0000-000000000001\"\n}"
+						},
+						"url": "{{base_url}}/api/vocabulary/favorites"
+					}
+				},
+				{
+					"name": "Remove favorite",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": "{{base_url}}/api/vocabulary/favorites/vocabulary/{{vocabulary_id}}"
+					}
+				},
+				{
+					"name": "List favorites",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": "{{base_url}}/api/vocabulary/favorites"
+					}
+				}
+			]
+		},
+		{
+			"name": "Voice Chat",
+			"item": [
+				{
+					"name": "Get voice limits",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": "{{base_url}}/api/voice/limits"
+					}
+				},
+				{
+					"name": "Start voice session",
+					"request": {
+						"method": "POST",
+						"header": [{"key": "Content-Type", "value": "application/json", "type": "text"}],
+						"body": {"mode": "raw", "raw": "{\n  \"language_code\": \"fr\"\n}"},
+						"url": "{{base_url}}/api/voice/session"
+					}
+				}
+			]
+		}
+	]
+}

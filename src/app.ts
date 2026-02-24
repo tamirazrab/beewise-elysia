@@ -11,6 +11,7 @@ import {
 	subscriptionStatusModule,
 } from '@modules/free-ai-chat';
 import { paidAIChatModule, paidUsageModule } from '@modules/paid-ai-chat';
+import { paidVoiceModule } from '@modules/paid-voice';
 import { vocabularyModule } from '@modules/vocabulary';
 import { voiceChatModule } from '@modules/voice-chat';
 import { Elysia } from 'elysia';
@@ -66,7 +67,8 @@ export const createApp = () => {
 						{ name: 'Practice', description: 'Speaking/listening practice sessions and recordings' },
 						{ name: 'Quiz', description: 'Quizzes, questions, and attempt submission' },
 						{ name: 'Favorites', description: 'Favorite vocabulary items and quizzes' },
-						{ name: 'Voice Chat', description: 'Voice session limits and session start' },
+						{ name: 'Voice Chat', description: 'Voice session limits and session start (free, Nova Sonic)' },
+						{ name: 'Paid Voice', description: 'Paid-tier voice via OpenAI Realtime (GPT)' },
 					],
 				},
 				scalarConfig: {
@@ -129,6 +131,7 @@ export const createApp = () => {
 		.use(subscriptionStatusModule)
 		.use(paidAIChatModule)
 		.use(paidUsageModule)
+		.use(paidVoiceModule)
 		.use(vocabularyModule)
 		.use(voiceChatModule);
 

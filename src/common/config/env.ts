@@ -154,6 +154,14 @@ const EnvSchema = Type.Object({
 		description: 'Bedrock cost per 1K tokens',
 		default: '0.0001',
 	}),
+	BEDROCK_NOVA_SONIC_MODEL_ID: Type.String({
+		description: 'Bedrock Nova Sonic model ID for voice chat',
+		default: 'amazon.nova-sonic-v1:0',
+	}),
+	VOICE_WS_TOKEN_EXPIRY_SEC: Type.Number({
+		description: 'Voice WebSocket token expiry in seconds',
+		default: 300,
+	}),
 
 	// OpenAI (for paid AI chat)
 	OPENAI_API_KEY: Type.Optional(
@@ -280,6 +288,10 @@ export function validateEnv(): Env {
 		S3_BUCKET_NAME: process.env['S3_BUCKET_NAME'] || 'beewise-practice-recordings',
 		BEDROCK_MODEL_ID: process.env['BEDROCK_MODEL_ID'] || 'amazon.titan-text-lite-v1',
 		BEDROCK_COST_PER_1K_TOKENS: process.env['BEDROCK_COST_PER_1K_TOKENS'] || '0.0001',
+		BEDROCK_NOVA_SONIC_MODEL_ID: process.env['BEDROCK_NOVA_SONIC_MODEL_ID'] || 'amazon.nova-sonic-v1:0',
+		VOICE_WS_TOKEN_EXPIRY_SEC: process.env['VOICE_WS_TOKEN_EXPIRY_SEC']
+			? Number(process.env['VOICE_WS_TOKEN_EXPIRY_SEC'])
+			: 300,
 		OPENAI_API_KEY: process.env['OPENAI_API_KEY'] ?? 'sk-proj-1234567890',
 		OPENAI_MODEL: process.env['OPENAI_MODEL'] || 'gpt-4o-mini',
 		OPENAI_INPUT_COST_PER_1K: process.env['OPENAI_INPUT_COST_PER_1K'] || '0.15',

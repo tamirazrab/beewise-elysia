@@ -21,16 +21,15 @@ export function withAdmin<T extends Elysia<any, any, any, any, any, any, any>>(a
 						};
 					}
 
-					// TEMPORARY: Admin role check disabled – any authenticated user can access admin routes.
-					// Uncomment below to re-enforce admin-only access.
-					// const isAdmin = (user as any).isAdmin === true || (user as any).role === 'admin';
-					// if (!isAdmin) {
-					// 	set.status = 403;
-					// 	return {
-					// 		error: 'Forbidden',
-					// 		message: 'Admin access required',
-					// 	};
-					// }
+					const isAdmin = (user as { isAdmin?: boolean; role?: string }).isAdmin === true ||
+						(user as { isAdmin?: boolean; role?: string }).role === 'admin';
+					if (!isAdmin) {
+						set.status = 403;
+						return {
+							error: 'Forbidden',
+							message: 'Admin access required',
+						};
+					}
 				},
 			};
 		},
