@@ -1,5 +1,3 @@
-import { withAuth } from '@common/middleware/auth-guard';
-import { withAdmin } from '@common/middleware/admin-guard';
 import { db } from '@common/db';
 import {
 	vocabularyItem,
@@ -109,9 +107,7 @@ const addFavoriteSchema = t.Object({
 	itemId: t.String({ format: 'uuid', description: 'UUID of the vocabulary item or quiz' }),
 });
 
-export const vocabularyModule = withAdmin(
-	withAuth(new Elysia({ prefix: '/api/vocabulary' })),
-)
+export const vocabularyModule = new Elysia({ prefix: '/api/vocabulary' })
 	// ==================== Vocabulary CRUD ====================
 
 	// GET /api/vocabulary - List vocabulary items
