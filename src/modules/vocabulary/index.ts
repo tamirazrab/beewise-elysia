@@ -260,7 +260,7 @@ export const vocabularyModule = withAdmin(
 			};
 		},
 		{
-			auth: true,
+			// auth: true,
 			admin: true,
 			body: createVocabularySchema,
 			detail: {
@@ -318,7 +318,7 @@ export const vocabularyModule = withAdmin(
 			};
 		},
 		{
-			auth: true,
+			// auth: true,
 			admin: true,
 			params: t.Object({
 				id: t.String({ format: 'uuid' }),
@@ -363,7 +363,7 @@ export const vocabularyModule = withAdmin(
 			};
 		},
 		{
-			auth: true,
+			// auth: true,
 			admin: true,
 			params: t.Object({
 				id: t.String({ format: 'uuid' }),
@@ -397,7 +397,7 @@ export const vocabularyModule = withAdmin(
 			return { progress };
 		},
 		{
-			auth: true,
+			// auth: true,
 			query: t.Object({
 				vocabularyId: t.Optional(t.String({ format: 'uuid' })),
 			}),
@@ -437,7 +437,7 @@ export const vocabularyModule = withAdmin(
 			};
 		},
 		{
-			auth: true,
+			// auth: true,
 			params: t.Object({
 				vocabularyId: t.String({ format: 'uuid' }),
 			}),
@@ -500,7 +500,7 @@ export const vocabularyModule = withAdmin(
 			return { items };
 		},
 		{
-			auth: true,
+			// // auth: true,
 			detail: {
 				tags: ['Progress'],
 				summary: 'Get review items',
@@ -531,7 +531,7 @@ export const vocabularyModule = withAdmin(
 			};
 		},
 		{
-			auth: true,
+			// // auth: true,
 			body: createPracticeSessionSchema,
 			detail: {
 				tags: ['Practice'],
@@ -566,7 +566,7 @@ export const vocabularyModule = withAdmin(
 			return { sessions };
 		},
 		{
-			auth: true,
+			// auth: true,
 			query: t.Object({
 				limit: t.Optional(t.Number({ minimum: 1, maximum: 100 })),
 				offset: t.Optional(t.Number({ minimum: 0 })),
@@ -596,7 +596,7 @@ export const vocabularyModule = withAdmin(
 			return { data: session };
 		},
 		{
-			auth: true,
+			// auth: true,
 			params: t.Object({
 				id: t.String({ format: 'uuid' }),
 			}),
@@ -648,7 +648,7 @@ export const vocabularyModule = withAdmin(
 			};
 		},
 		{
-			auth: true,
+			// auth: true,
 			params: t.Object({
 				id: t.String({ format: 'uuid' }),
 			}),
@@ -691,7 +691,7 @@ export const vocabularyModule = withAdmin(
 			return { recordings };
 		},
 		{
-			auth: true,
+			// auth: true,
 			params: t.Object({
 				id: t.String({ format: 'uuid' }),
 			}),
@@ -738,7 +738,7 @@ export const vocabularyModule = withAdmin(
 			};
 		},
 		{
-			auth: true,
+			// auth: true,
 			params: t.Object({
 				id: t.String({ format: 'uuid' }),
 			}),
@@ -787,7 +787,7 @@ export const vocabularyModule = withAdmin(
 			};
 		},
 		{
-			auth: true,
+			// auth: true,
 			query: t.Object({
 				languageCode: t.Optional(t.String()),
 				difficultyLevel: t.Optional(difficultyLevelEnum),
@@ -830,7 +830,7 @@ export const vocabularyModule = withAdmin(
 			};
 		},
 		{
-			auth: true,
+			// auth: true,
 			params: t.Object({
 				id: t.String({ format: 'uuid' }),
 			}),
@@ -876,7 +876,7 @@ export const vocabularyModule = withAdmin(
 			};
 		},
 		{
-			auth: true,
+			// auth: true,
 			admin: true,
 			body: createQuizSchema,
 			detail: {
@@ -921,7 +921,7 @@ export const vocabularyModule = withAdmin(
 			};
 		},
 		{
-			auth: true,
+			// auth: true,
 			admin: true,
 			body: generateQuizSchema,
 			detail: {
@@ -995,7 +995,7 @@ export const vocabularyModule = withAdmin(
 			};
 		},
 		{
-			auth: true,
+			// auth: true,
 			params: t.Object({
 				id: t.String({ format: 'uuid' }),
 			}),
@@ -1037,7 +1037,7 @@ export const vocabularyModule = withAdmin(
 			return { attempts };
 		},
 		{
-			auth: true,
+			// auth: true,
 			query: t.Object({
 				quizId: t.Optional(t.String({ format: 'uuid' })),
 				limit: t.Optional(t.Number({ minimum: 1, maximum: 100 })),
@@ -1095,7 +1095,7 @@ export const vocabularyModule = withAdmin(
 			};
 		},
 		{
-			auth: true,
+			// auth: true,
 			body: addFavoriteSchema,
 			detail: {
 				tags: ['Favorites'],
@@ -1131,7 +1131,7 @@ export const vocabularyModule = withAdmin(
 			};
 		},
 		{
-			auth: true,
+			// auth: true,
 			params: t.Object({
 				itemType: favoriteTypeEnum,
 				itemId: t.String({ format: 'uuid' }),
@@ -1166,7 +1166,7 @@ export const vocabularyModule = withAdmin(
 			return { favorites };
 		},
 		{
-			auth: true,
+			// auth: true,
 			query: t.Object({
 				itemType: t.Optional(favoriteTypeEnum),
 				limit: t.Optional(t.Number({ minimum: 1, maximum: 100 })),
