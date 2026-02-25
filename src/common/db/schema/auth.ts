@@ -13,6 +13,8 @@ export const user = pgTable('user', {
 	emailVerified: boolean('email_verified').notNull().default(false),
 	image: text('image'),
 	role: text('role').default('user'), // 'user' | 'admin' for admin-guard
+	/** Set when user signs up with device_id; links to anonymous identity for migration and recognition. */
+	linkedAnonymousIdHash: text('linked_anonymous_id_hash'),
 	createdAt: timestamp('created_at').notNull().defaultNow(),
 	updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });

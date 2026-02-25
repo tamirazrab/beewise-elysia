@@ -1,9 +1,11 @@
+import { getTextLlmCost } from '@common/config/openai-pricing';
 import { env } from '@common/config/env';
 import OpenAI from 'openai';
 
 /**
  * Paid AI Chat Service
- * Handles OpenAI integration for paid-tier chat
+ * Handles OpenAI integration for paid-tier chat.
+ * Cost is computed from per-1M token pricing (see openai-pricing.ts).
  */
 
 const openai = new OpenAI({
@@ -29,7 +31,7 @@ export async function invokeOpenAI(
 			role: msg.role,
 			content: msg.content,
 		})),
-		temperature: 0.7,
+		temperature: 1,
 	});
 
 	const choice = response.choices[0];
@@ -37,13 +39,19 @@ export async function invokeOpenAI(
 		throw new Error('No response from OpenAI');
 	}
 
-	const inputTokens = response.usage?.prompt_tokens || 0;
-	const outputTokens = response.usage?.completion_tokens || 0;
+	const inputTokens = response.usage?.prompt_tokens ?? 0;
+	const outputTokens = response.usage?.completion_tokens ?? 0;
 	const totalTokens = inputTokens + outputTokens;
 
-	const costUsd =
-		(inputTokens / 1000) * parseFloat(env.OPENAI_INPUT_COST_PER_1K) +
-		(outputTokens / 1000) * parseFloat(env.OPENAI_OUTPUT_COST_PER_1K);
+	const usage = response.usage as { prompt_tokens_details?: { cached_tokens?: number } } | undefined;
+	const cachedInputTokens = usage?.prompt_tokens_details?.cached_tokens ?? 0;
+
+	let costUsd = getTextLlmCost(env.OPENAI_MODEL, inputTokens, outputTokens, cachedInputTokens);
+	if (costUsd === 0 && totalTokens > 0) {
+		costUsd =
+			(inputTokens / 1_000_000) * Number.parseFloat(env.OPENAI_INPUT_COST_PER_1M) +
+			(outputTokens / 1_000_000) * Number.parseFloat(env.OPENAI_OUTPUT_COST_PER_1M);
+	}
 
 	return {
 		content: choice.message.content || '',

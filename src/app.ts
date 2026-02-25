@@ -14,9 +14,10 @@ import { paidAIChatModule, paidUsageModule } from '@modules/paid-ai-chat';
 import { paidVoiceModule } from '@modules/paid-voice';
 import { vocabularyModule } from '@modules/vocabulary';
 import { voiceChatModule } from '@modules/voice-chat';
+import { trialModule } from '@modules/trial';
 import { Elysia } from 'elysia';
 import { appLogger } from './common/logger';
-import { authRateLimit, globalRateLimit } from './common/middleware/rate-limiter';
+import { authRateLimit, globalRateLimit, trialRateLimit } from './common/middleware/rate-limiter';
 import { requestLogger } from './common/middleware/request-logger';
 
 /**
@@ -69,6 +70,7 @@ export const createApp = () => {
 						{ name: 'Favorites', description: 'Favorite vocabulary items and quizzes' },
 						{ name: 'Voice Chat', description: 'Voice session limits and session start (free, Nova Sonic)' },
 						{ name: 'Paid Voice', description: 'Paid-tier voice via OpenAI Realtime (GPT)' },
+						{ name: 'Trial', description: 'Unauthenticated trial chat (Bedrock) and voice (Nova Sonic); device ID + per-IP limits' },
 					],
 				},
 				scalarConfig: {
@@ -84,7 +86,7 @@ export const createApp = () => {
 			appLogger.error({
 				code,
 				error: errorMessage,
-				stack: env.NODE_ENV === 'development' && error instanceof Error ? error.stack : undefined,
+				stack: env.APP_ENV === 'local' && error instanceof Error ? error.stack : undefined,
 			});
 
 			if (code === 'NOT_FOUND') {
@@ -111,7 +113,7 @@ export const createApp = () => {
 			set.status = 500;
 			return {
 				error: 'Internal server error',
-				message: env.NODE_ENV === 'development' ? errorMessage : undefined,
+				message: env.APP_ENV === 'local' ? errorMessage : undefined,
 			};
 		})
 
@@ -133,7 +135,9 @@ export const createApp = () => {
 		.use(paidUsageModule)
 		.use(paidVoiceModule)
 		.use(vocabularyModule)
-		.use(voiceChatModule);
+		.use(voiceChatModule)
+		.use(trialRateLimit)
+		.use(trialModule);
 
 	if (env.ENABLE_AUTH) {
 		app.use(authRateLimit);

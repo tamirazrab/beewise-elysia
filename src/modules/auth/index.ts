@@ -1,9 +1,11 @@
 import { auth } from '@common/config/auth';
 import { db } from '@common/db';
 import { account, user } from '@common/db/schema/auth';
+import { hashDeviceId } from '@common/utils/device-id';
 import { hashPassword, verifyPassword } from 'better-auth/crypto';
 import { and, eq } from 'drizzle-orm';
 import { Elysia, t } from 'elysia';
+import { migrateAnonymousDataToUser } from './migrate-anonymous';
 
 const MIN_PASSWORD_LENGTH = 8;
 const MAX_PASSWORD_LENGTH = 128;
@@ -15,6 +17,7 @@ const MAX_PASSWORD_LENGTH = 128;
 const loginBody = t.Object({
 	email: t.String({ format: 'email' }),
 	password: t.String({ minLength: 1 }),
+	device_id: t.Optional(t.String({ description: 'Anonymous device ID to link and migrate data' })),
 });
 
 const registerBody = t.Object({
@@ -22,6 +25,7 @@ const registerBody = t.Object({
 	password: t.String({ minLength: MIN_PASSWORD_LENGTH, maxLength: MAX_PASSWORD_LENGTH }),
 	name: t.String({ minLength: 1 }),
 	image: t.Optional(t.String()),
+	device_id: t.Optional(t.String({ description: 'Anonymous device ID to link and migrate data' })),
 });
 
 export const authModule = new Elysia({ prefix: '/api/auth' })
@@ -58,6 +62,15 @@ export const authModule = new Elysia({ prefix: '/api/auth' })
 				set.status = 401;
 				return { error: 'Unauthorized', message: 'Invalid email or password' };
 			}
+			if (body.device_id?.trim() && !foundUser.linkedAnonymousIdHash) {
+				const anonymousIdHash = hashDeviceId(body.device_id.trim());
+				await db
+					.update(user)
+					.set({ linkedAnonymousIdHash: anonymousIdHash, updatedAt: new Date() })
+					.where(eq(user.id, foundUser.id));
+				await migrateAnonymousDataToUser(anonymousIdHash, foundUser.id);
+			}
+
 			const token = await jwt.sign({
 				sub: foundUser.id,
 				email: foundUser.email,
@@ -104,6 +117,8 @@ export const authModule = new Elysia({ prefix: '/api/auth' })
 			const userId = globalThis.crypto.randomUUID();
 			const accountId = globalThis.crypto.randomUUID();
 			const passwordHash = await hashPassword(body.password);
+			const anonymousIdHash = body.device_id?.trim() ? hashDeviceId(body.device_id.trim()) : null;
+
 			await db.insert(user).values({
 				id: userId,
 				name: body.name.trim(),
@@ -111,6 +126,7 @@ export const authModule = new Elysia({ prefix: '/api/auth' })
 				emailVerified: false,
 				image: body.image ?? null,
 				role: 'user',
+				linkedAnonymousIdHash: anonymousIdHash ?? undefined,
 			});
 			await db.insert(account).values({
 				id: accountId,
@@ -119,6 +135,9 @@ export const authModule = new Elysia({ prefix: '/api/auth' })
 				userId,
 				password: passwordHash,
 			});
+			if (anonymousIdHash) {
+				await migrateAnonymousDataToUser(anonymousIdHash, userId);
+			}
 			const token = await jwt.sign({
 				sub: userId,
 				email: emailLower,

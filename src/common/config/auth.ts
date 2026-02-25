@@ -86,6 +86,6 @@ export const auth = betterAuth({
 	baseURL: env.BETTER_AUTH_URL,
 	advanced: {
 		cookiePrefix: 'auth',
-		useSecureCookies: env.NODE_ENV === 'production',
+		useSecureCookies: env.APP_ENV === 'staging' || env.APP_ENV === 'production',
 	},
 });

@@ -15,6 +15,15 @@ const EnvSchema = Type.Object({
 			default: 'development',
 		},
 	),
+	/** Deployment environment: local (dev), staging (e.g. Coolify), production. Drives DB, auth, logging, CORS. */
+	APP_ENV: Type.Union(
+		[
+			Type.Literal('local'),
+			Type.Literal('staging'),
+			Type.Literal('production'),
+		],
+		{ default: 'local' },
+	),
 	PORT: Type.Number({
 		default: 3000,
 	}),
@@ -174,12 +183,12 @@ const EnvSchema = Type.Object({
 		description: 'OpenAI model name',
 		default: 'gpt-4o-mini',
 	}),
-	OPENAI_INPUT_COST_PER_1K: Type.String({
-		description: 'OpenAI input cost per 1K tokens',
+	OPENAI_INPUT_COST_PER_1M: Type.String({
+		description: 'OpenAI input cost per 1M tokens (fallback when model not in openai-pricing)',
 		default: '0.15',
 	}),
-	OPENAI_OUTPUT_COST_PER_1K: Type.String({
-		description: 'OpenAI output cost per 1K tokens',
+	OPENAI_OUTPUT_COST_PER_1M: Type.String({
+		description: 'OpenAI output cost per 1M tokens (fallback when model not in openai-pricing)',
 		default: '0.60',
 	}),
 
@@ -242,6 +251,62 @@ const EnvSchema = Type.Object({
 		description: 'Max tokens per request',
 		default: '2000',
 	}),
+
+	// Trial (unauthenticated) limits and abuse protection
+	TRIAL_CHAT_MAX_SESSIONS: Type.Number({
+		description: 'Max trial chat sessions per identity (lifetime)',
+		default: 1,
+	}),
+	TRIAL_CHAT_MAX_MESSAGES: Type.Number({
+		description: 'Max trial chat messages per identity (lifetime)',
+		default: 5,
+	}),
+	TRIAL_CHAT_MAX_TOKENS_PER_REQUEST: Type.Number({
+		description: 'Max tokens per trial chat message',
+		default: 500,
+	}),
+	TRIAL_VOICE_MAX_SESSIONS: Type.Number({
+		description: 'Max trial voice sessions per identity (lifetime)',
+		default: 1,
+	}),
+	TRIAL_VOICE_MAX_SECONDS: Type.Number({
+		description: 'Max trial voice seconds per identity (lifetime)',
+		default: 90,
+	}),
+	TRIAL_RATE_LIMIT_PER_IP_PER_HOUR: Type.Number({
+		description: 'Max trial session creations per IP per hour',
+		default: 10,
+	}),
+	TRIAL_RATE_LIMIT_PER_IP_PER_DAY: Type.Number({
+		description: 'Max trial session creations per IP per day (24h sliding)',
+		default: 30,
+	}),
+	TRIAL_MAX_IDENTITIES_PER_IP_PER_DAY: Type.Number({
+		description: 'Max distinct trial identities from same IP in 24h (abuse block)',
+		default: 15,
+	}),
+
+	// Free anonymous (no login, X-Device-Id) limits – same tables as trial, higher caps
+	FREE_ANONYMOUS_CHAT_MAX_SESSIONS: Type.Number({
+		description: 'Max free anonymous chat sessions per identity (lifetime)',
+		default: 20,
+	}),
+	FREE_ANONYMOUS_CHAT_MAX_MESSAGES: Type.Number({
+		description: 'Max free anonymous chat messages per identity (lifetime)',
+		default: 200,
+	}),
+	FREE_ANONYMOUS_CHAT_MAX_TOKENS_PER_REQUEST: Type.Number({
+		description: 'Max tokens per free anonymous chat message',
+		default: 2000,
+	}),
+	FREE_ANONYMOUS_VOICE_MAX_SESSIONS: Type.Number({
+		description: 'Max free anonymous voice sessions per identity (lifetime)',
+		default: 10,
+	}),
+	FREE_ANONYMOUS_VOICE_MAX_SECONDS: Type.Number({
+		description: 'Max free anonymous voice seconds per identity (lifetime)',
+		default: 600,
+	}),
 });
 
 export type Env = Static<typeof EnvSchema>;
@@ -252,8 +317,17 @@ export function validateEnv(): Env {
 		? rawCorsOrigin.split(',').map((origin) => origin.trim())
 		: ['http://localhost:3000']; // Default fallback
 
+	const nodeEnv = process.env['NODE_ENV'] || 'development';
+	const appEnvRaw = process.env['APP_ENV'];
+	const appEnv =
+		appEnvRaw === 'staging' || appEnvRaw === 'production' || appEnvRaw === 'local'
+			? appEnvRaw
+			: nodeEnv === 'production'
+				? 'production'
+				: 'local';
 	const rawEnv = {
-		NODE_ENV: process.env['NODE_ENV'] || 'development',
+		NODE_ENV: nodeEnv,
+		APP_ENV: appEnv,
 		PORT: Number(process.env['PORT'] ?? 3000),
 		HOST: process.env['HOST'] || '0.0.0.0',
 		DATABASE_URL: process.env['DATABASE_URL'] || 'postgresql://localhost:5432/beewise',
@@ -293,9 +367,9 @@ export function validateEnv(): Env {
 			? Number(process.env['VOICE_WS_TOKEN_EXPIRY_SEC'])
 			: 300,
 		OPENAI_API_KEY: process.env['OPENAI_API_KEY'] ?? 'sk-proj-1234567890',
-		OPENAI_MODEL: process.env['OPENAI_MODEL'] || 'gpt-4o-mini',
-		OPENAI_INPUT_COST_PER_1K: process.env['OPENAI_INPUT_COST_PER_1K'] || '0.15',
-		OPENAI_OUTPUT_COST_PER_1K: process.env['OPENAI_OUTPUT_COST_PER_1K'] || '0.60',
+		OPENAI_MODEL: process.env['OPENAI_MODEL'] || 'gpt-5-nano',
+		OPENAI_INPUT_COST_PER_1M: process.env['OPENAI_INPUT_COST_PER_1M'] || '0.15',
+		OPENAI_OUTPUT_COST_PER_1M: process.env['OPENAI_OUTPUT_COST_PER_1M'] || '0.60',
 		GOOGLE_CLIENT_ID: process.env['GOOGLE_CLIENT_ID'] ?? '',
 		GOOGLE_CLIENT_SECRET: process.env['GOOGLE_CLIENT_SECRET'] ?? '',
 		APPLE_CLIENT_ID: process.env['APPLE_CLIENT_ID'] ?? '',
@@ -307,6 +381,45 @@ export function validateEnv(): Env {
 		MONTHLY_SESSION_LIMIT: process.env['MONTHLY_SESSION_LIMIT'] || '10',
 		MAX_MESSAGES_PER_SESSION: process.env['MAX_MESSAGES_PER_SESSION'] || '20',
 		MAX_TOKENS_PER_REQUEST: process.env['MAX_TOKENS_PER_REQUEST'] || '2000',
+		TRIAL_CHAT_MAX_SESSIONS: process.env['TRIAL_CHAT_MAX_SESSIONS']
+			? Number(process.env['TRIAL_CHAT_MAX_SESSIONS'])
+			: 1,
+		TRIAL_CHAT_MAX_MESSAGES: process.env['TRIAL_CHAT_MAX_MESSAGES']
+			? Number(process.env['TRIAL_CHAT_MAX_MESSAGES'])
+			: 5,
+		TRIAL_CHAT_MAX_TOKENS_PER_REQUEST: process.env['TRIAL_CHAT_MAX_TOKENS_PER_REQUEST']
+			? Number(process.env['TRIAL_CHAT_MAX_TOKENS_PER_REQUEST'])
+			: 500,
+		TRIAL_VOICE_MAX_SESSIONS: process.env['TRIAL_VOICE_MAX_SESSIONS']
+			? Number(process.env['TRIAL_VOICE_MAX_SESSIONS'])
+			: 1,
+		TRIAL_VOICE_MAX_SECONDS: process.env['TRIAL_VOICE_MAX_SECONDS']
+			? Number(process.env['TRIAL_VOICE_MAX_SECONDS'])
+			: 90,
+		TRIAL_RATE_LIMIT_PER_IP_PER_HOUR: process.env['TRIAL_RATE_LIMIT_PER_IP_PER_HOUR']
+			? Number(process.env['TRIAL_RATE_LIMIT_PER_IP_PER_HOUR'])
+			: 10,
+		TRIAL_RATE_LIMIT_PER_IP_PER_DAY: process.env['TRIAL_RATE_LIMIT_PER_IP_PER_DAY']
+			? Number(process.env['TRIAL_RATE_LIMIT_PER_IP_PER_DAY'])
+			: 30,
+		TRIAL_MAX_IDENTITIES_PER_IP_PER_DAY: process.env['TRIAL_MAX_IDENTITIES_PER_IP_PER_DAY']
+			? Number(process.env['TRIAL_MAX_IDENTITIES_PER_IP_PER_DAY'])
+			: 15,
+		FREE_ANONYMOUS_CHAT_MAX_SESSIONS: process.env['FREE_ANONYMOUS_CHAT_MAX_SESSIONS']
+			? Number(process.env['FREE_ANONYMOUS_CHAT_MAX_SESSIONS'])
+			: 20,
+		FREE_ANONYMOUS_CHAT_MAX_MESSAGES: process.env['FREE_ANONYMOUS_CHAT_MAX_MESSAGES']
+			? Number(process.env['FREE_ANONYMOUS_CHAT_MAX_MESSAGES'])
+			: 200,
+		FREE_ANONYMOUS_CHAT_MAX_TOKENS_PER_REQUEST: process.env['FREE_ANONYMOUS_CHAT_MAX_TOKENS_PER_REQUEST']
+			? Number(process.env['FREE_ANONYMOUS_CHAT_MAX_TOKENS_PER_REQUEST'])
+			: 2000,
+		FREE_ANONYMOUS_VOICE_MAX_SESSIONS: process.env['FREE_ANONYMOUS_VOICE_MAX_SESSIONS']
+			? Number(process.env['FREE_ANONYMOUS_VOICE_MAX_SESSIONS'])
+			: 10,
+		FREE_ANONYMOUS_VOICE_MAX_SECONDS: process.env['FREE_ANONYMOUS_VOICE_MAX_SECONDS']
+			? Number(process.env['FREE_ANONYMOUS_VOICE_MAX_SECONDS'])
+			: 600,
 	};
 
 	// Validate against schema

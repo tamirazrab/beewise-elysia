@@ -41,7 +41,7 @@ export const createRateLimiter = (options: {
 		valid.push(now);
 
 		if (valid.length > options.max) {
-			if (env.NODE_ENV === 'development') {
+			if (env.APP_ENV === 'local') {
 				appLogger.warn(
 					`[RATE_LIMIT] IP ${ip} blocked (limit: ${options.max}/${options.windowMs}ms)`,
 				);
@@ -72,4 +72,53 @@ export const authRateLimit = createRateLimiter({
 	max: env.AUTH_RATE_LIMIT_MAX ?? 10,
 	windowMs: env.AUTH_RATE_LIMIT_WINDOW_MS ?? 60000,
 	cache: authCache,
+});
+
+// Trial: per-IP hourly and daily caps on session creation only
+const trialHourlyCache = new LRUCache<string, number[]>({
+	max: 50000,
+	ttl: 60 * 60 * 1000, // 1 hour
+});
+
+const trialDailyCache = new LRUCache<string, number[]>({
+	max: 50000,
+	ttl: 24 * 60 * 60 * 1000, // 24 hours
+});
+
+const isTrialSessionCreation = (req: Request): boolean => {
+	if (req.method !== 'POST') return false;
+	const path = new URL(req.url).pathname;
+	return path === '/api/trial/chat/sessions' || path === '/api/trial/voice/session';
+};
+
+export const trialRateLimit = new Elysia().onRequest(({ request, set }) => {
+	if (!env.ENABLE_RATE_LIMITER) return;
+	if (!isTrialSessionCreation(request)) return;
+
+	const ip = getClientIP(request);
+	const now = Date.now();
+
+	const hourlyTimestamps = trialHourlyCache.get(ip) || [];
+	const hourlyValid = hourlyTimestamps.filter((ts) => now - ts < 60 * 60 * 1000);
+	hourlyValid.push(now);
+	if (hourlyValid.length > (env.TRIAL_RATE_LIMIT_PER_IP_PER_HOUR ?? 10)) {
+		set.status = 429;
+		return {
+			error: 'Too Many Requests',
+			message: 'Too many trial sessions from this network. Try again later or sign up.',
+		};
+	}
+	trialHourlyCache.set(ip, hourlyValid);
+
+	const dailyTimestamps = trialDailyCache.get(ip) || [];
+	const dailyValid = dailyTimestamps.filter((ts) => now - ts < 24 * 60 * 60 * 1000);
+	dailyValid.push(now);
+	if (dailyValid.length > (env.TRIAL_RATE_LIMIT_PER_IP_PER_DAY ?? 30)) {
+		set.status = 429;
+		return {
+			error: 'Too Many Requests',
+			message: 'Too many trial sessions from this network. Try again later or sign up.',
+		};
+	}
+	trialDailyCache.set(ip, dailyValid);
 });

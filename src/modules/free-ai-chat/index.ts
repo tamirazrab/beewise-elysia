@@ -1,4 +1,4 @@
-import { withAuth } from '@common/middleware/auth-guard';
+import { withAuth, withOptionalAuth } from '@common/middleware/auth-guard';
 import { Elysia, t } from 'elysia';
 import { db } from '@common/db';
 import {
@@ -6,7 +6,9 @@ import {
 	conversationMessage,
 	freeSubscriptionStatus,
 } from '@common/db/schema';
+import { env } from '@common/config/env';
 import { eq, and, desc, sql } from 'drizzle-orm';
+import * as trialService from '@modules/trial/service';
 import * as service from './service';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -31,20 +33,23 @@ const SUPPORTED_LANGUAGE_CODES = new Set([
 	'en', 'es', 'zh', 'fr', 'ar', 'de', 'ja', 'pt', 'ko', 'hi', 'ur', 'bn',
 ]);
 
+function getClientIP(request: Request): string {
+	return (
+		request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+		request.headers.get('x-real-ip') ||
+		'127.0.0.1'
+	);
+}
+
 /**
  * Free AI Chat Module
- * Handles free-tier AI chat sessions, messages, usage tracking, and limits
+ * Handles free-tier AI chat sessions (logged-in or anonymous via X-Device-Id), messages, usage tracking, and limits
  */
-export const freeAIChatModule = withAuth(new Elysia({ prefix: '/api/free' }))
-	// POST /api/free/sessions - Create session
+export const freeAIChatModule = withOptionalAuth(new Elysia({ prefix: '/api/free' }))
+	// POST /api/free/sessions - Create session (JWT or X-Device-Id)
 	.post(
 		'/sessions',
-		async ({ body, user, set }: any) => {
-			if (!user) {
-				set.status = 401;
-				return { error: 'Unauthorized', message: 'Please login first' };
-			}
-
+		async ({ body, user, anonymousIdHash, set, request }: any) => {
 			if (!SUPPORTED_LANGUAGE_CODES.has(body.language_code)) {
 				set.status = 400;
 				return {
@@ -53,40 +58,72 @@ export const freeAIChatModule = withAuth(new Elysia({ prefix: '/api/free' }))
 				};
 			}
 
-			const monthlyUsage = await service.getMonthlyUsage(user.id);
-			const sessionCount = monthlyUsage?.session_count || 0;
-
-			const limitCheck = service.checkMonthlySessionLimit(sessionCount);
-			if (!limitCheck.allowed) {
-				set.status = 429;
-				return { error: 'Resource Exhausted', message: limitCheck.reason };
+			if (user) {
+				const monthlyUsage = await service.getMonthlyUsage(user.id);
+				const sessionCount = monthlyUsage?.session_count || 0;
+				const limitCheck = service.checkMonthlySessionLimit(sessionCount);
+				if (!limitCheck.allowed) {
+					set.status = 429;
+					return { error: 'Resource Exhausted', message: limitCheck.reason };
+				}
+				const [session] = await db
+					.insert(conversationSession)
+					.values({
+						userId: user.id,
+						languageCode: body.language_code,
+						status: 'active',
+					})
+					.returning();
+				if (!session) {
+					set.status = 500;
+					return { error: 'Internal Server Error', message: 'Failed to create session' };
+				}
+				await service.incrementMonthlySessionUsage(user.id);
+				await service.incrementDailyUsage(user.id, 0, 0, 1);
+				const systemPrompt = service.buildSystemPrompt(session.languageCode);
+				await service.saveMessage(session.id, 'system', systemPrompt, await service.estimateTokenCount(systemPrompt));
+				set.status = 201;
+				return { session };
 			}
 
-			const [session] = await db
-				.insert(conversationSession)
-				.values({
-					userId: user.id,
-					languageCode: body.language_code,
-					status: 'active',
-				})
-				.returning();
-
-			if (!session) {
-				set.status = 500;
-				return { error: 'Internal Server Error', message: 'Failed to create session' };
+			if (anonymousIdHash) {
+				const ip = getClientIP(request);
+				const ipHash = trialService.hashIp(ip);
+				const abused = await trialService.checkIpAbuse(ipHash);
+				if (abused) {
+					set.status = 429;
+					return { error: 'Too Many Requests', message: 'Too many identities from this network. Try again later.' };
+				}
+				try {
+					const { sessionId } = await trialService.createFreeAnonymousChatSession(
+						anonymousIdHash,
+						body.language_code,
+						ipHash,
+					);
+					set.status = 201;
+					return {
+						session: {
+							id: sessionId,
+							languageCode: body.language_code,
+							status: 'active',
+						},
+					};
+				} catch (err) {
+					const msg = err instanceof Error ? err.message : 'Failed to create session';
+					if (msg.includes('limit')) {
+						set.status = 429;
+						return { error: 'Resource Exhausted', message: msg };
+					}
+					set.status = 500;
+					return { error: 'Internal Server Error', message: msg };
+				}
 			}
 
-			await service.incrementMonthlySessionUsage(user.id);
-			await service.incrementDailyUsage(user.id, 0, 0, 1);
-
-			const systemPrompt = service.buildSystemPrompt(session.languageCode);
-			await service.saveMessage(session.id, 'system', systemPrompt, await service.estimateTokenCount(systemPrompt));
-
-			set.status = 201;
-			return { session };
+			set.status = 401;
+			return { error: 'Unauthorized', message: 'Send Authorization: Bearer <token> or X-Device-Id header.' };
 		},
 		{
-			auth: true,
+			freeIdentity: true,
 			body: t.Object({
 				language_code: t.String({
 					description: 'ISO 639-1 language code for the conversation (e.g. en, es, fr)',
@@ -96,7 +133,7 @@ export const freeAIChatModule = withAuth(new Elysia({ prefix: '/api/free' }))
 			detail: {
 				tags: ['Free AI Chat'],
 				summary: 'Create session',
-				description: 'Authenticated. Create a new free-tier conversation session. Request body is prefilled with a sample.',
+				description: 'Create a free-tier conversation session. Use JWT (logged-in) or X-Device-Id (anonymous).',
 				requestBody: {
 					content: {
 						'application/json': {
@@ -108,38 +145,45 @@ export const freeAIChatModule = withAuth(new Elysia({ prefix: '/api/free' }))
 		},
 	)
 
-	// GET /api/free/sessions - List sessions
+	// GET /api/free/sessions - List sessions (JWT or X-Device-Id)
 	.get(
 		'/sessions',
-		async ({ query, user, set }: any) => {
-			if (!user) {
-				set.status = 401;
-				return { error: 'Unauthorized', message: 'Please login first' };
-			}
-
+		async ({ query, user, anonymousIdHash, set }: any) => {
 			const limit = query.limit ? Number(query.limit) : 20;
 			const offset = query.offset ? Number(query.offset) : 0;
 
-			const sessions = await db
-				.select()
-				.from(conversationSession)
-				.where(eq(conversationSession.userId, user.id))
-				.orderBy(desc(conversationSession.createdAt))
-				.limit(limit)
-				.offset(offset);
+			if (user) {
+				const sessions = await db
+					.select()
+					.from(conversationSession)
+					.where(eq(conversationSession.userId, user.id))
+					.orderBy(desc(conversationSession.createdAt))
+					.limit(limit)
+					.offset(offset);
+				const [{ count }] = await db
+					.select({ count: sql<number>`count(*)` })
+					.from(conversationSession)
+					.where(eq(conversationSession.userId, user.id));
+				return { sessions, total: Number(count) };
+			}
 
-			const [{ count }] = await db
-				.select({ count: sql<number>`count(*)` })
-				.from(conversationSession)
-				.where(eq(conversationSession.userId, user.id));
+			if (anonymousIdHash) {
+				const sessions = await trialService.listTrialSessionsByHash(anonymousIdHash, limit + offset, 0);
+				const total = sessions.length;
+				const page = sessions.slice(offset, offset + limit).map((s) => ({
+					id: s.id,
+					languageCode: s.languageCode,
+					createdAt: s.createdAt,
+					status: 'active',
+				}));
+				return { sessions: page, total };
+			}
 
-			return {
-				sessions,
-				total: Number(count),
-			};
+			set.status = 401;
+			return { error: 'Unauthorized', message: 'Send JWT or X-Device-Id.' };
 		},
 		{
-			auth: true,
+			freeIdentity: true,
 			query: t.Object({
 				limit: t.Optional(t.String()),
 				offset: t.Optional(t.String()),
@@ -147,7 +191,7 @@ export const freeAIChatModule = withAuth(new Elysia({ prefix: '/api/free' }))
 			detail: {
 				tags: ['Free AI Chat'],
 				summary: 'List sessions',
-				description: 'List all conversation sessions for the authenticated user',
+				description: 'List conversation sessions (logged-in or anonymous by X-Device-Id)',
 			},
 		},
 	)
@@ -155,12 +199,7 @@ export const freeAIChatModule = withAuth(new Elysia({ prefix: '/api/free' }))
 	// GET /api/free/sessions/:id - Get session
 	.get(
 		'/:id',
-		async ({ params, user, set }: any) => {
-			if (!user) {
-				set.status = 401;
-				return { error: 'Unauthorized', message: 'Please login first' };
-			}
-
+		async ({ params, user, anonymousIdHash, set }: any) => {
 			try {
 				validateUUID(params.id, 'session id');
 			} catch (error: any) {
@@ -168,21 +207,33 @@ export const freeAIChatModule = withAuth(new Elysia({ prefix: '/api/free' }))
 				return { error: 'Bad Request', message: error.message };
 			}
 
-			const [session] = await db
-				.select()
-				.from(conversationSession)
-				.where(and(eq(conversationSession.id, params.id), eq(conversationSession.userId, user.id)))
-				.limit(1);
-
-			if (!session) {
-				set.status = 404;
-				return { error: 'Not Found', message: 'Session not found' };
+			if (user) {
+				const [session] = await db
+					.select()
+					.from(conversationSession)
+					.where(and(eq(conversationSession.id, params.id), eq(conversationSession.userId, user.id)))
+					.limit(1);
+				if (!session) {
+					set.status = 404;
+					return { error: 'Not Found', message: 'Session not found' };
+				}
+				return session;
 			}
 
-			return session;
+			if (anonymousIdHash) {
+				const session = await trialService.getTrialChatSession(params.id, anonymousIdHash);
+				if (!session) {
+					set.status = 404;
+					return { error: 'Not Found', message: 'Session not found' };
+				}
+				return { id: session.id, languageCode: session.languageCode, status: 'active' };
+			}
+
+			set.status = 401;
+			return { error: 'Unauthorized', message: 'Send JWT or X-Device-Id.' };
 		},
 		{
-			auth: true,
+			freeIdentity: true,
 			params: t.Object({
 				id: t.String(),
 			}),
@@ -194,22 +245,24 @@ export const freeAIChatModule = withAuth(new Elysia({ prefix: '/api/free' }))
 		},
 	)
 
-	// POST /api/free/sessions/:id/close - Close session
+	// POST /api/free/sessions/:id/close - Close session (logged-in only; anonymous sessions have no close)
 	.post(
 		'/:id/close',
-		async ({ params, user, set }: any) => {
+		async ({ params, user, anonymousIdHash, set }: any) => {
+			if (anonymousIdHash) {
+				set.status = 400;
+				return { error: 'Bad Request', message: 'Anonymous sessions cannot be closed. Use delete if needed.' };
+			}
 			if (!user) {
 				set.status = 401;
 				return { error: 'Unauthorized', message: 'Please login first' };
 			}
-
 			try {
 				validateUUID(params.id, 'session id');
 			} catch (error: any) {
 				set.status = 400;
 				return { error: 'Bad Request', message: error.message };
 			}
-
 			const [session] = await db
 				.update(conversationSession)
 				.set({
@@ -226,23 +279,21 @@ export const freeAIChatModule = withAuth(new Elysia({ prefix: '/api/free' }))
 					),
 				)
 				.returning();
-
 			if (!session) {
 				set.status = 404;
 				return { error: 'Not Found', message: 'Active session not found' };
 			}
-
 			return session;
 		},
 		{
-			auth: true,
+			freeIdentity: true,
 			params: t.Object({
 				id: t.String(),
 			}),
 			detail: {
 				tags: ['Free AI Chat'],
 				summary: 'Close session',
-				description: 'Close an active conversation session',
+				description: 'Close an active conversation session (logged-in only)',
 			},
 		},
 	)
@@ -250,27 +301,32 @@ export const freeAIChatModule = withAuth(new Elysia({ prefix: '/api/free' }))
 	// DELETE /api/free/sessions/:id - Delete session
 	.delete(
 		'/:id',
-		async ({ params, user, set }: any) => {
-			if (!user) {
-				set.status = 401;
-				return { error: 'Unauthorized', message: 'Please login first' };
-			}
-
+		async ({ params, user, anonymousIdHash, set }: any) => {
 			try {
 				validateUUID(params.id, 'session id');
 			} catch (error: any) {
 				set.status = 400;
 				return { error: 'Bad Request', message: error.message };
 			}
-
-			await db
-				.delete(conversationSession)
-				.where(and(eq(conversationSession.id, params.id), eq(conversationSession.userId, user.id)));
-
-			return { message: 'Session deleted successfully' };
+			if (user) {
+				await db
+					.delete(conversationSession)
+					.where(and(eq(conversationSession.id, params.id), eq(conversationSession.userId, user.id)));
+				return { message: 'Session deleted successfully' };
+			}
+			if (anonymousIdHash) {
+				const deleted = await trialService.deleteTrialSession(params.id, anonymousIdHash);
+				if (!deleted) {
+					set.status = 404;
+					return { error: 'Not Found', message: 'Session not found' };
+				}
+				return { message: 'Session deleted successfully' };
+			}
+			set.status = 401;
+			return { error: 'Unauthorized', message: 'Send JWT or X-Device-Id.' };
 		},
 		{
-			auth: true,
+			freeIdentity: true,
 			params: t.Object({
 				id: t.String(),
 			}),
@@ -282,15 +338,10 @@ export const freeAIChatModule = withAuth(new Elysia({ prefix: '/api/free' }))
 		},
 	)
 
-	// POST /api/free/sessions/:id/messages - Send message
+	// POST /api/free/sessions/:id/messages - Send message (JWT or X-Device-Id)
 	.post(
 		'/:id/messages',
-		async ({ params, body, user, set }: any) => {
-			if (!user) {
-				set.status = 401;
-				return { error: 'Unauthorized', message: 'Please login first' };
-			}
-
+		async ({ params, body, user, anonymousIdHash, set }: any) => {
 			try {
 				validateUUID(params.id, 'session id');
 			} catch (error: any) {
@@ -298,97 +349,111 @@ export const freeAIChatModule = withAuth(new Elysia({ prefix: '/api/free' }))
 				return { error: 'Bad Request', message: error.message };
 			}
 
-			const [session] = await db
-				.select()
-				.from(conversationSession)
-				.where(
-					and(
-						eq(conversationSession.id, params.id),
-						eq(conversationSession.userId, user.id),
-						eq(conversationSession.status, 'active'),
-					),
-				)
-				.limit(1);
-
-			if (!session) {
-				set.status = 404;
-				return { error: 'Not Found', message: 'Active session not found' };
+			if (user) {
+				const [session] = await db
+					.select()
+					.from(conversationSession)
+					.where(
+						and(
+							eq(conversationSession.id, params.id),
+							eq(conversationSession.userId, user.id),
+							eq(conversationSession.status, 'active'),
+						),
+					)
+					.limit(1);
+				if (!session) {
+					set.status = 404;
+					return { error: 'Not Found', message: 'Active session not found' };
+				}
+				const dailyUsage = await service.getDailyUsage(user.id);
+				const currentMessageCount = dailyUsage?.message_count || 0;
+				const currentTokenCount = dailyUsage?.token_count || 0;
+				const messageLimitCheck = service.checkDailyMessageLimit(currentMessageCount);
+				if (!messageLimitCheck.allowed) {
+					set.status = 429;
+					return { error: 'Resource Exhausted', message: messageLimitCheck.reason };
+				}
+				const userMessageTokens = await service.estimateTokenCount(body.content);
+				const tokenLimitCheck = service.checkDailyTokenLimit(currentTokenCount, userMessageTokens);
+				if (!tokenLimitCheck.allowed) {
+					set.status = 429;
+					return { error: 'Resource Exhausted', message: tokenLimitCheck.reason };
+				}
+				const requestTokenCheck = service.checkRequestTokenLimit(userMessageTokens);
+				if (!requestTokenCheck.allowed) {
+					set.status = 400;
+					return { error: 'Bad Request', message: requestTokenCheck.reason };
+				}
+				await service.saveMessage(session.id, 'user', body.content, userMessageTokens);
+				await service.incrementDailyUsage(user.id, 1, userMessageTokens, 0);
+				const messages = await service.getSessionMessages(session.id, service.FREE_TIER_LIMITS.MAX_MESSAGES_PER_SESSION);
+				const systemPrompt = service.buildSystemPrompt(session.languageCode);
+				const bedrockResponse = await service.invokeBedrock(messages, systemPrompt);
+				await service.saveMessage(session.id, 'assistant', bedrockResponse.content, bedrockResponse.tokensUsed);
+				await service.incrementDailyUsage(user.id, 1, bedrockResponse.tokensUsed, 0);
+				const [updatedSession] = await db
+					.update(conversationSession)
+					.set({
+						aiCostEstimateUsd: sql`${conversationSession.aiCostEstimateUsd} + ${bedrockResponse.costUsd}`,
+						updatedAt: new Date(),
+					})
+					.where(eq(conversationSession.id, session.id))
+					.returning();
+				if (!updatedSession) {
+					set.status = 500;
+					return { error: 'Internal Server Error', message: 'Failed to update session' };
+				}
+				const [userMessage] = await db
+					.select()
+					.from(conversationMessage)
+					.where(and(eq(conversationMessage.sessionId, session.id), eq(conversationMessage.role, 'user')))
+					.orderBy(desc(conversationMessage.createdAt))
+					.limit(1);
+				const [aiMessage] = await db
+					.select()
+					.from(conversationMessage)
+					.where(and(eq(conversationMessage.sessionId, session.id), eq(conversationMessage.role, 'assistant')))
+					.orderBy(desc(conversationMessage.createdAt))
+					.limit(1);
+				if (!userMessage || !aiMessage) {
+					set.status = 500;
+					return { error: 'Internal Server Error', message: 'Failed to retrieve messages' };
+				}
+				return { message: userMessage, ai_response: aiMessage, session: updatedSession };
 			}
 
-			const dailyUsage = await service.getDailyUsage(user.id);
-			const currentMessageCount = dailyUsage?.message_count || 0;
-			const currentTokenCount = dailyUsage?.token_count || 0;
-
-			const messageLimitCheck = service.checkDailyMessageLimit(currentMessageCount);
-			if (!messageLimitCheck.allowed) {
-				set.status = 429;
-				return { error: 'Resource Exhausted', message: messageLimitCheck.reason };
+			if (anonymousIdHash) {
+				try {
+					const result = await trialService.sendFreeAnonymousChatMessage(
+						anonymousIdHash,
+						params.id,
+						body.content,
+					);
+					return {
+						message: { role: 'user', content: body.content },
+						ai_response: { role: 'assistant', content: result.content },
+						session: { id: params.id, status: 'active' },
+					};
+				} catch (err) {
+					const msg = err instanceof Error ? err.message : 'Failed to send message';
+					if (msg.includes('not found') || msg.includes('Session')) {
+						set.status = 404;
+						return { error: 'Not Found', message: msg };
+					}
+					if (msg.includes('limit') || msg.includes('long')) {
+						set.status = msg.includes('long') ? 400 : 429;
+						return { error: msg.includes('long') ? 'Bad Request' : 'Resource Exhausted', message: msg };
+					}
+					set.status = 500;
+					return { error: 'Internal Server Error', message: msg };
+				}
 			}
 
-			const userMessageTokens = await service.estimateTokenCount(body.content);
-			const tokenLimitCheck = service.checkDailyTokenLimit(currentTokenCount, userMessageTokens);
-			if (!tokenLimitCheck.allowed) {
-				set.status = 429;
-				return { error: 'Resource Exhausted', message: tokenLimitCheck.reason };
-			}
-
-			const requestTokenCheck = service.checkRequestTokenLimit(userMessageTokens);
-			if (!requestTokenCheck.allowed) {
-				set.status = 400;
-				return { error: 'Bad Request', message: requestTokenCheck.reason };
-			}
-
-			await service.saveMessage(session.id, 'user', body.content, userMessageTokens);
-			await service.incrementDailyUsage(user.id, 1, userMessageTokens, 0);
-
-			const messages = await service.getSessionMessages(session.id, service.FREE_TIER_LIMITS.MAX_MESSAGES_PER_SESSION);
-			const systemPrompt = service.buildSystemPrompt(session.languageCode);
-			const bedrockResponse = await service.invokeBedrock(messages, systemPrompt);
-
-			await service.saveMessage(session.id, 'assistant', bedrockResponse.content, bedrockResponse.tokensUsed);
-			await service.incrementDailyUsage(user.id, 1, bedrockResponse.tokensUsed, 0);
-
-			const [updatedSession] = await db
-				.update(conversationSession)
-				.set({
-					aiCostEstimateUsd: sql`${conversationSession.aiCostEstimateUsd} + ${bedrockResponse.costUsd}`,
-					updatedAt: new Date(),
-				})
-				.where(eq(conversationSession.id, session.id))
-				.returning();
-
-			if (!updatedSession) {
-				set.status = 500;
-				return { error: 'Internal Server Error', message: 'Failed to update session' };
-			}
-
-			const [userMessage] = await db
-				.select()
-				.from(conversationMessage)
-				.where(and(eq(conversationMessage.sessionId, session.id), eq(conversationMessage.role, 'user')))
-				.orderBy(desc(conversationMessage.createdAt))
-				.limit(1);
-
-			const [aiMessage] = await db
-				.select()
-				.from(conversationMessage)
-				.where(and(eq(conversationMessage.sessionId, session.id), eq(conversationMessage.role, 'assistant')))
-				.orderBy(desc(conversationMessage.createdAt))
-				.limit(1);
-
-			if (!userMessage || !aiMessage) {
-				set.status = 500;
-				return { error: 'Internal Server Error', message: 'Failed to retrieve messages' };
-			}
-
-			return {
-				message: userMessage,
-				ai_response: aiMessage,
-				session: updatedSession,
-			};
+			set.status = 401;
+			return { error: 'Unauthorized', message: 'Send JWT or X-Device-Id.' };
 		},
 		{
-			auth: true,
+			freeIdentity: true,
 			params: t.Object({
 				id: t.String(),
 			}),
@@ -401,7 +466,7 @@ export const freeAIChatModule = withAuth(new Elysia({ prefix: '/api/free' }))
 			detail: {
 				tags: ['Free AI Chat'],
 				summary: 'Send message',
-				description: 'Authenticated. Send a message in an active conversation session. Body is prefilled with an example.',
+				description: 'Send a message in an active session (JWT or X-Device-Id)',
 				requestBody: {
 					content: {
 						'application/json': {
@@ -413,56 +478,59 @@ export const freeAIChatModule = withAuth(new Elysia({ prefix: '/api/free' }))
 		},
 	)
 
-	// GET /api/free/sessions/:id/messages - Get messages
+	// GET /api/free/sessions/:id/messages - Get messages (JWT or X-Device-Id)
 	.get(
 		'/:id/messages',
-		async ({ params, query, user, set }: any) => {
-			if (!user) {
-				set.status = 401;
-				return { error: 'Unauthorized', message: 'Please login first' };
-			}
-
+		async ({ params, query, user, anonymousIdHash, set }: any) => {
 			try {
 				validateUUID(params.id, 'session id');
 			} catch (error: any) {
 				set.status = 400;
 				return { error: 'Bad Request', message: error.message };
 			}
-
-			const [sessionCheck] = await db
-				.select({ id: conversationSession.id })
-				.from(conversationSession)
-				.where(and(eq(conversationSession.id, params.id), eq(conversationSession.userId, user.id)))
-				.limit(1);
-
-			if (!sessionCheck) {
-				set.status = 404;
-				return { error: 'Not Found', message: 'Session not found' };
-			}
-
 			const limit = query.limit ? Number(query.limit) : 20;
 			const offset = query.offset ? Number(query.offset) : 0;
 
-			const messages = await db
-				.select()
-				.from(conversationMessage)
-				.where(eq(conversationMessage.sessionId, params.id))
-				.orderBy(desc(conversationMessage.createdAt))
-				.limit(limit)
-				.offset(offset);
+			if (user) {
+				const [sessionCheck] = await db
+					.select({ id: conversationSession.id })
+					.from(conversationSession)
+					.where(and(eq(conversationSession.id, params.id), eq(conversationSession.userId, user.id)))
+					.limit(1);
+				if (!sessionCheck) {
+					set.status = 404;
+					return { error: 'Not Found', message: 'Session not found' };
+				}
+				const messages = await db
+					.select()
+					.from(conversationMessage)
+					.where(eq(conversationMessage.sessionId, params.id))
+					.orderBy(desc(conversationMessage.createdAt))
+					.limit(limit)
+					.offset(offset);
+				const [{ count }] = await db
+					.select({ count: sql<number>`count(*)` })
+					.from(conversationMessage)
+					.where(eq(conversationMessage.sessionId, params.id));
+				return { messages: messages.reverse(), total: Number(count) };
+			}
 
-			const [{ count }] = await db
-				.select({ count: sql<number>`count(*)` })
-				.from(conversationMessage)
-				.where(eq(conversationMessage.sessionId, params.id));
+			if (anonymousIdHash) {
+				const session = await trialService.getTrialChatSession(params.id, anonymousIdHash);
+				if (!session) {
+					set.status = 404;
+					return { error: 'Not Found', message: 'Session not found' };
+				}
+				const rows = await trialService.getTrialSessionMessages(params.id, limit + offset);
+				const slice = rows.slice(offset, offset + limit);
+				return { messages: slice.map((m) => ({ role: m.role, content: m.content })), total: rows.length };
+			}
 
-			return {
-				messages: messages.reverse(),
-				total: Number(count),
-			};
+			set.status = 401;
+			return { error: 'Unauthorized', message: 'Send JWT or X-Device-Id.' };
 		},
 		{
-			auth: true,
+			freeIdentity: true,
 			params: t.Object({
 				id: t.String(),
 			}),
@@ -478,94 +546,89 @@ export const freeAIChatModule = withAuth(new Elysia({ prefix: '/api/free' }))
 		},
 	);
 
-// Usage endpoints (separate module)
-export const usageModule = withAuth(new Elysia({ prefix: '/api/usage' }))
-	// GET /api/usage/daily - Get daily usage
+// Usage endpoints (JWT or X-Device-Id)
+export const usageModule = withOptionalAuth(new Elysia({ prefix: '/api/usage' }))
 	.get(
 		'/daily',
-		async ({ user, set }: any) => {
-			if (!user) {
-				set.status = 401;
-				return { error: 'Unauthorized', message: 'Please login first' };
+		async ({ user, anonymousIdHash, set }: any) => {
+			if (user) {
+				const daily = await service.getDailyUsage(user.id);
+				const monthly = await service.getMonthlyUsage(user.id);
+				return {
+					daily: {
+						message_count: daily?.message_count || 0,
+						token_count: daily?.token_count || 0,
+						session_count: daily?.session_count || 0,
+					},
+					monthly: { session_count: monthly?.session_count || 0 },
+					limits: {
+						daily_message_limit: service.FREE_TIER_LIMITS.DAILY_MESSAGE_LIMIT,
+						daily_token_limit: service.FREE_TIER_LIMITS.DAILY_TOKEN_LIMIT,
+						monthly_session_limit: service.FREE_TIER_LIMITS.MONTHLY_SESSION_LIMIT,
+					},
+				};
 			}
+			if (anonymousIdHash) {
+				const identity = await trialService.getOrCreateTrialIdentity(anonymousIdHash);
+				return {
+					daily: {
+						message_count: identity.chatMessagesUsed,
+						token_count: 0,
+						session_count: identity.chatSessionsUsed,
+					},
+					monthly: { session_count: identity.chatSessionsUsed },
+					limits: {
+						daily_message_limit: env.FREE_ANONYMOUS_CHAT_MAX_MESSAGES,
+						daily_token_limit: env.FREE_ANONYMOUS_CHAT_MAX_TOKENS_PER_REQUEST,
+						monthly_session_limit: env.FREE_ANONYMOUS_CHAT_MAX_SESSIONS,
+					},
+				};
+			}
+			set.status = 401;
+			return { error: 'Unauthorized', message: 'Send JWT or X-Device-Id.' };
+		},
+		{ freeIdentity: true, detail: { tags: ['Free AI Chat'], summary: 'Get daily usage', description: 'Daily usage (JWT or X-Device-Id)' } },
+	)
+	.get(
+		'/monthly',
+		async ({ user, anonymousIdHash, set }: any) => {
+			if (user) {
+				const monthly = await service.getMonthlyUsage(user.id);
+				return { session_count: monthly?.session_count || 0 };
+			}
+			if (anonymousIdHash) {
+				const identity = await trialService.getOrCreateTrialIdentity(anonymousIdHash);
+				return { session_count: identity.chatSessionsUsed };
+			}
+			set.status = 401;
+			return { error: 'Unauthorized', message: 'Send JWT or X-Device-Id.' };
+		},
+		{ freeIdentity: true, detail: { tags: ['Free AI Chat'], summary: 'Get monthly usage', description: 'Monthly usage (JWT or X-Device-Id)' } },
+	);
 
-			const daily = await service.getDailyUsage(user.id);
-			const monthly = await service.getMonthlyUsage(user.id);
-
-			return {
-				daily: {
-					message_count: daily?.message_count || 0,
-					token_count: daily?.token_count || 0,
-					session_count: daily?.session_count || 0,
-				},
-				monthly: {
-					session_count: monthly?.session_count || 0,
-				},
-				limits: {
+// Limits endpoint (JWT or X-Device-Id)
+export const limitsModule = withOptionalAuth(new Elysia({ prefix: '/api/limits' }))
+	.get(
+		'/',
+		async ({ user, anonymousIdHash, set }: any) => {
+			if (user) {
+				return {
 					daily_message_limit: service.FREE_TIER_LIMITS.DAILY_MESSAGE_LIMIT,
 					daily_token_limit: service.FREE_TIER_LIMITS.DAILY_TOKEN_LIMIT,
 					monthly_session_limit: service.FREE_TIER_LIMITS.MONTHLY_SESSION_LIMIT,
-				},
-			};
-		},
-		{
-			auth: true,
-			detail: {
-				tags: ['Free AI Chat'],
-				summary: 'Get daily usage',
-				description: 'Get daily usage statistics',
-			},
-		},
-	)
-
-	// GET /api/usage/monthly - Get monthly usage
-	.get(
-		'/monthly',
-		async ({ user, set }: any) => {
-			if (!user) {
-				set.status = 401;
-				return { error: 'Unauthorized', message: 'Please login first' };
+				};
 			}
-
-			const monthly = await service.getMonthlyUsage(user.id);
-			return {
-				session_count: monthly?.session_count || 0,
-			};
-		},
-		{
-			auth: true,
-			detail: {
-				tags: ['Free AI Chat'],
-				summary: 'Get monthly usage',
-				description: 'Get monthly usage statistics',
-			},
-		},
-	);
-
-// Limits endpoint
-export const limitsModule = withAuth(new Elysia({ prefix: '/api/limits' }))
-	.get(
-		'/',
-		async ({ user, set }: any) => {
-			if (!user) {
-				set.status = 401;
-				return { error: 'Unauthorized', message: 'Please login first' };
+			if (anonymousIdHash) {
+				return {
+					daily_message_limit: env.FREE_ANONYMOUS_CHAT_MAX_MESSAGES,
+					daily_token_limit: env.FREE_ANONYMOUS_CHAT_MAX_TOKENS_PER_REQUEST,
+					monthly_session_limit: env.FREE_ANONYMOUS_CHAT_MAX_SESSIONS,
+				};
 			}
-
-			return {
-				daily_message_limit: service.FREE_TIER_LIMITS.DAILY_MESSAGE_LIMIT,
-				daily_token_limit: service.FREE_TIER_LIMITS.DAILY_TOKEN_LIMIT,
-				monthly_session_limit: service.FREE_TIER_LIMITS.MONTHLY_SESSION_LIMIT,
-			};
+			set.status = 401;
+			return { error: 'Unauthorized', message: 'Send JWT or X-Device-Id.' };
 		},
-		{
-			auth: true,
-			detail: {
-				tags: ['Free AI Chat'],
-				summary: 'Get limits',
-				description: 'Get free tier limits',
-			},
-		},
+		{ freeIdentity: true, detail: { tags: ['Free AI Chat'], summary: 'Get limits', description: 'Free tier limits (JWT or X-Device-Id)' } },
 	);
 
 // Subscription status endpoint

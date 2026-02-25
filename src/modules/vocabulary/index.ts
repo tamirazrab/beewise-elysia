@@ -8,7 +8,13 @@ import {
 	quizQuestion,
 	quizAttempt,
 	favoriteItem,
+	anonymousVocabularyProgress,
+	anonymousPracticeSession,
+	anonymousPracticeRecording,
+	anonymousQuizAttempt,
+	anonymousFavoriteItem,
 } from '@common/db/schema';
+import { withOptionalAuth } from '@common/middleware/auth-guard';
 import { Elysia, t } from 'elysia';
 import { eq, and, desc, isNull, sql, or, lt, asc } from 'drizzle-orm';
 import * as service from './service';
@@ -107,7 +113,7 @@ const addFavoriteSchema = t.Object({
 	itemId: t.String({ format: 'uuid', description: 'UUID of the vocabulary item or quiz' }),
 });
 
-export const vocabularyModule = new Elysia({ prefix: '/api/vocabulary' })
+export const vocabularyModule = withOptionalAuth(new Elysia({ prefix: '/api/vocabulary' }))
 	// ==================== Vocabulary CRUD ====================
 
 	// GET /api/vocabulary - List vocabulary items
@@ -374,33 +380,41 @@ export const vocabularyModule = new Elysia({ prefix: '/api/vocabulary' })
 
 	// ==================== Progress Endpoints ====================
 
-	// GET /api/vocabulary/progress - Get user progress
+	// GET /api/vocabulary/progress - Get user or anonymous progress
 	.get(
 		'/progress',
-		async ({ query, user, set }: any) => {
-			const conditions = [eq(userVocabularyProgress.userId, user.id)];
-
-			if (query.vocabularyId) {
-				conditions.push(eq(userVocabularyProgress.vocabularyId, query.vocabularyId));
+		async ({ query, user, anonymousIdHash, set }: any) => {
+			if (!user && !anonymousIdHash) {
+				set.status = 401;
+				return { error: 'Unauthorized', message: 'Send JWT or X-Device-Id.' };
 			}
-
+			if (user) {
+				const conditions = [eq(userVocabularyProgress.userId, user.id)];
+				if (query.vocabularyId) conditions.push(eq(userVocabularyProgress.vocabularyId, query.vocabularyId));
+				const progress = await db
+					.select()
+					.from(userVocabularyProgress)
+					.where(and(...conditions))
+					.orderBy(desc(userVocabularyProgress.updatedAt));
+				return { progress };
+			}
+			const conditions = [eq(anonymousVocabularyProgress.anonymousIdHash, anonymousIdHash)];
+			if (query.vocabularyId) conditions.push(eq(anonymousVocabularyProgress.vocabularyId, query.vocabularyId));
 			const progress = await db
 				.select()
-				.from(userVocabularyProgress)
+				.from(anonymousVocabularyProgress)
 				.where(and(...conditions))
-				.orderBy(desc(userVocabularyProgress.updatedAt));
-
+				.orderBy(desc(anonymousVocabularyProgress.updatedAt));
 			return { progress };
 		},
 		{
-			// auth: true,
 			query: t.Object({
 				vocabularyId: t.Optional(t.String({ format: 'uuid' })),
 			}),
 			detail: {
 				tags: ['Progress'],
-				summary: 'Get user progress',
-				description: 'Get vocabulary progress for the authenticated user',
+				summary: 'Get progress',
+				description: 'Vocabulary progress (JWT or X-Device-Id)',
 			},
 		},
 	)
@@ -408,17 +422,41 @@ export const vocabularyModule = new Elysia({ prefix: '/api/vocabulary' })
 	// PUT /api/vocabulary/progress/:vocabularyId - Update progress
 	.put(
 		'/progress/:vocabularyId',
-		async ({ params, body, user, set }: any) => {
+		async ({ params, body, user, anonymousIdHash, set }: any) => {
+			if (!user && !anonymousIdHash) {
+				set.status = 401;
+				return { error: 'Unauthorized', message: 'Send JWT or X-Device-Id.' };
+			}
+			if (user) {
+				const [progress] = await db
+					.insert(userVocabularyProgress)
+					.values({
+						userId: user.id,
+						vocabularyId: params.vocabularyId,
+						masteryLevel: body.masteryLevel,
+						lastPracticedAt: new Date(),
+					})
+					.onConflictDoUpdate({
+						target: [userVocabularyProgress.userId, userVocabularyProgress.vocabularyId],
+						set: {
+							masteryLevel: body.masteryLevel,
+							lastPracticedAt: new Date(),
+							updatedAt: new Date(),
+						},
+					})
+					.returning();
+				return { message: 'Progress updated successfully', data: progress };
+			}
 			const [progress] = await db
-				.insert(userVocabularyProgress)
+				.insert(anonymousVocabularyProgress)
 				.values({
-					userId: user.id,
+					anonymousIdHash: anonymousIdHash!,
 					vocabularyId: params.vocabularyId,
 					masteryLevel: body.masteryLevel,
 					lastPracticedAt: new Date(),
 				})
 				.onConflictDoUpdate({
-					target: [userVocabularyProgress.userId, userVocabularyProgress.vocabularyId],
+					target: [anonymousVocabularyProgress.anonymousIdHash, anonymousVocabularyProgress.vocabularyId],
 					set: {
 						masteryLevel: body.masteryLevel,
 						lastPracticedAt: new Date(),
@@ -426,14 +464,9 @@ export const vocabularyModule = new Elysia({ prefix: '/api/vocabulary' })
 					},
 				})
 				.returning();
-
-			return {
-				message: 'Progress updated successfully',
-				data: progress,
-			};
+			return { message: 'Progress updated successfully', data: progress };
 		},
 		{
-			// auth: true,
 			params: t.Object({
 				vocabularyId: t.String({ format: 'uuid' }),
 			}),
@@ -441,7 +474,7 @@ export const vocabularyModule = new Elysia({ prefix: '/api/vocabulary' })
 			detail: {
 				tags: ['Progress'],
 				summary: 'Update progress',
-				description: 'Authenticated. Update or create vocabulary progress (mastery 0–100). Body prefilled.',
+				description: 'Update or create vocabulary progress (JWT or X-Device-Id)',
 				requestBody: {
 					content: {
 						'application/json': {
@@ -456,10 +489,48 @@ export const vocabularyModule = new Elysia({ prefix: '/api/vocabulary' })
 	// GET /api/vocabulary/progress/review - Get review items
 	.get(
 		'/progress/review',
-		async ({ user }: any) => {
+		async ({ user, anonymousIdHash, set }: any) => {
+			if (!user && !anonymousIdHash) {
+				set.status = 401;
+				return { error: 'Unauthorized', message: 'Send JWT or X-Device-Id.' };
+			}
 			const sevenDaysAgo = new Date();
 			sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-
+			if (user) {
+				const items = await db
+					.select({
+						id: vocabularyItem.id,
+						languageCode: vocabularyItem.languageCode,
+						difficultyLevel: vocabularyItem.difficultyLevel,
+						word: vocabularyItem.word,
+						meaning: vocabularyItem.meaning,
+						exampleSentence: vocabularyItem.exampleSentence,
+						audioUrl: vocabularyItem.audioUrl,
+						createdAt: vocabularyItem.createdAt,
+					})
+					.from(vocabularyItem)
+					.leftJoin(
+						userVocabularyProgress,
+						and(
+							eq(vocabularyItem.id, userVocabularyProgress.vocabularyId),
+							eq(userVocabularyProgress.userId, user.id),
+						),
+					)
+					.where(
+						and(
+							isNull(vocabularyItem.deletedAt),
+							or(
+								isNull(userVocabularyProgress.masteryLevel),
+								lt(userVocabularyProgress.masteryLevel, 80),
+								isNull(userVocabularyProgress.lastPracticedAt),
+								lt(userVocabularyProgress.lastPracticedAt, sevenDaysAgo),
+							),
+						),
+					)
+					.orderBy(asc(userVocabularyProgress.lastPracticedAt))
+					.limit(20);
+				return { items };
+			}
 			const items = await db
 				.select({
 					id: vocabularyItem.id,
@@ -473,34 +544,32 @@ export const vocabularyModule = new Elysia({ prefix: '/api/vocabulary' })
 				})
 				.from(vocabularyItem)
 				.leftJoin(
-					userVocabularyProgress,
+					anonymousVocabularyProgress,
 					and(
-						eq(vocabularyItem.id, userVocabularyProgress.vocabularyId),
-						eq(userVocabularyProgress.userId, user.id),
+						eq(vocabularyItem.id, anonymousVocabularyProgress.vocabularyId),
+						eq(anonymousVocabularyProgress.anonymousIdHash, anonymousIdHash!),
 					),
 				)
 				.where(
 					and(
 						isNull(vocabularyItem.deletedAt),
 						or(
-							isNull(userVocabularyProgress.masteryLevel),
-							lt(userVocabularyProgress.masteryLevel, 80),
-							isNull(userVocabularyProgress.lastPracticedAt),
-							lt(userVocabularyProgress.lastPracticedAt, sevenDaysAgo),
+							isNull(anonymousVocabularyProgress.masteryLevel),
+							lt(anonymousVocabularyProgress.masteryLevel, 80),
+							isNull(anonymousVocabularyProgress.lastPracticedAt),
+							lt(anonymousVocabularyProgress.lastPracticedAt, sevenDaysAgo),
 						),
 					),
 				)
-				.orderBy(asc(userVocabularyProgress.lastPracticedAt))
+				.orderBy(asc(anonymousVocabularyProgress.lastPracticedAt))
 				.limit(20);
-
 			return { items };
 		},
 		{
-			// // auth: true,
 			detail: {
 				tags: ['Progress'],
 				summary: 'Get review items',
-				description: 'Get vocabulary items that need review (mastery < 80% or not practiced in 7 days)',
+				description: 'Vocabulary items that need review (JWT or X-Device-Id)',
 			},
 		},
 	)
@@ -510,29 +579,36 @@ export const vocabularyModule = new Elysia({ prefix: '/api/vocabulary' })
 	// POST /api/vocabulary/practice/sessions - Create practice session
 	.post(
 		'/practice/sessions',
-		async ({ body, user, set }: any) => {
+		async ({ body, user, anonymousIdHash, set }: any) => {
+			if (!user && !anonymousIdHash) {
+				set.status = 401;
+				return { error: 'Unauthorized', message: 'Send JWT or X-Device-Id.' };
+			}
+			if (user) {
+				const [session] = await db
+					.insert(practiceSession)
+					.values({ userId: user.id, type: body.type, languageCode: body.languageCode })
+					.returning();
+				set.status = 201;
+				return { message: 'Practice session created successfully', data: session };
+			}
 			const [session] = await db
-				.insert(practiceSession)
+				.insert(anonymousPracticeSession)
 				.values({
-					userId: user.id,
+					anonymousIdHash: anonymousIdHash!,
 					type: body.type,
 					languageCode: body.languageCode,
 				})
 				.returning();
-
 			set.status = 201;
-			return {
-				message: 'Practice session created successfully',
-				data: session,
-			};
+			return { message: 'Practice session created successfully', data: session };
 		},
 		{
-			// // auth: true,
 			body: createPracticeSessionSchema,
 			detail: {
 				tags: ['Practice'],
 				summary: 'Create practice session',
-				description: 'Authenticated. Create a new speaking or listening practice session. Body prefilled.',
+				description: 'Create practice session (JWT or X-Device-Id)',
 				requestBody: {
 					content: {
 						'application/json': {
@@ -578,28 +654,45 @@ export const vocabularyModule = new Elysia({ prefix: '/api/vocabulary' })
 	// GET /api/vocabulary/practice/sessions/:id - Get practice session
 	.get(
 		'/practice/sessions/:id',
-		async ({ params, user, set }: any) => {
+		async ({ params, user, anonymousIdHash, set }: any) => {
+			if (!user && !anonymousIdHash) {
+				set.status = 401;
+				return { error: 'Unauthorized', message: 'Send JWT or X-Device-Id.' };
+			}
+			if (user) {
+				const [session] = await db
+					.select()
+					.from(practiceSession)
+					.where(and(eq(practiceSession.id, params.id), eq(practiceSession.userId, user.id)));
+				if (!session) {
+					set.status = 404;
+					return { error: 'Not Found', message: 'Practice session not found' };
+				}
+				return { data: session };
+			}
 			const [session] = await db
 				.select()
-				.from(practiceSession)
-				.where(and(eq(practiceSession.id, params.id), eq(practiceSession.userId, user.id)));
-
+				.from(anonymousPracticeSession)
+				.where(
+					and(
+						eq(anonymousPracticeSession.id, params.id),
+						eq(anonymousPracticeSession.anonymousIdHash, anonymousIdHash!),
+					),
+				);
 			if (!session) {
 				set.status = 404;
 				return { error: 'Not Found', message: 'Practice session not found' };
 			}
-
 			return { data: session };
 		},
 		{
-			// auth: true,
 			params: t.Object({
 				id: t.String({ format: 'uuid' }),
 			}),
 			detail: {
 				tags: ['Practice'],
 				summary: 'Get practice session',
-				description: 'Get a single practice session by ID',
+				description: 'Get practice session by ID (JWT or X-Device-Id)',
 			},
 		},
 	)
@@ -609,42 +702,62 @@ export const vocabularyModule = new Elysia({ prefix: '/api/vocabulary' })
 	// POST /api/vocabulary/practice/sessions/:id/recordings - Create recording with upload URL
 	.post(
 		'/practice/sessions/:id/recordings',
-		async ({ params, body, user, set }: any) => {
+		async ({ params, body, user, anonymousIdHash, set }: any) => {
+			if (!user && !anonymousIdHash) {
+				set.status = 401;
+				return { error: 'Unauthorized', message: 'Send JWT or X-Device-Id.' };
+			}
+			if (user) {
+				const [session] = await db
+					.select()
+					.from(practiceSession)
+					.where(and(eq(practiceSession.id, params.id), eq(practiceSession.userId, user.id)));
+				if (!session) {
+					set.status = 404;
+					return { error: 'Not Found', message: 'Practice session not found' };
+				}
+				const recordingId = randomUUID();
+				const s3Key = service.generateS3Key(user.id, params.id, recordingId);
+				const [recording] = await db
+					.insert(practiceRecording)
+					.values({
+						sessionId: params.id,
+						s3Key,
+						durationSeconds: body.durationSeconds ?? null,
+					})
+					.returning();
+				const uploadUrl = await service.generateUploadSignedUrl(s3Key);
+				set.status = 201;
+				return { message: 'Recording created successfully', data: { recordingId: recording.id, uploadUrl } };
+			}
 			const [session] = await db
 				.select()
-				.from(practiceSession)
-				.where(and(eq(practiceSession.id, params.id), eq(practiceSession.userId, user.id)));
-
+				.from(anonymousPracticeSession)
+				.where(
+					and(
+						eq(anonymousPracticeSession.id, params.id),
+						eq(anonymousPracticeSession.anonymousIdHash, anonymousIdHash!),
+					),
+				);
 			if (!session) {
 				set.status = 404;
 				return { error: 'Not Found', message: 'Practice session not found' };
 			}
-
 			const recordingId = randomUUID();
-			const s3Key = service.generateS3Key(user.id, params.id, recordingId);
-
+			const s3Key = service.generateS3Key(anonymousIdHash, params.id, recordingId);
 			const [recording] = await db
-				.insert(practiceRecording)
+				.insert(anonymousPracticeRecording)
 				.values({
 					sessionId: params.id,
 					s3Key,
 					durationSeconds: body.durationSeconds ?? null,
 				})
 				.returning();
-
 			const uploadUrl = await service.generateUploadSignedUrl(s3Key);
-
 			set.status = 201;
-			return {
-				message: 'Recording created successfully',
-				data: {
-					recordingId: recording.id,
-					uploadUrl,
-				},
-			};
+			return { message: 'Recording created successfully', data: { recordingId: recording.id, uploadUrl } };
 		},
 		{
-			// auth: true,
 			params: t.Object({
 				id: t.String({ format: 'uuid' }),
 			}),
@@ -652,7 +765,7 @@ export const vocabularyModule = new Elysia({ prefix: '/api/vocabulary' })
 			detail: {
 				tags: ['Practice'],
 				summary: 'Create recording',
-				description: 'Authenticated. Create a practice recording and get an S3 upload URL. Body prefilled.',
+				description: 'Create recording and get upload URL (JWT or X-Device-Id)',
 				requestBody: {
 					content: {
 						'application/json': {
@@ -702,39 +815,63 @@ export const vocabularyModule = new Elysia({ prefix: '/api/vocabulary' })
 	// GET /api/vocabulary/practice/recordings/:id - Get recording with download URL
 	.get(
 		'/practice/recordings/:id',
-		async ({ params, user, set }: any) => {
+		async ({ params, user, anonymousIdHash, set }: any) => {
+			if (!user && !anonymousIdHash) {
+				set.status = 401;
+				return { error: 'Unauthorized', message: 'Send JWT or X-Device-Id.' };
+			}
+			if (user) {
+				const [recording] = await db
+					.select({
+						id: practiceRecording.id,
+						sessionId: practiceRecording.sessionId,
+						s3Key: practiceRecording.s3Key,
+						durationSeconds: practiceRecording.durationSeconds,
+						pronunciationScore: practiceRecording.pronunciationScore,
+						aiFeedback: practiceRecording.aiFeedback,
+						createdAt: practiceRecording.createdAt,
+					})
+					.from(practiceRecording)
+					.innerJoin(practiceSession, eq(practiceRecording.sessionId, practiceSession.id))
+					.where(
+						and(eq(practiceRecording.id, params.id), eq(practiceSession.userId, user.id)),
+					);
+				if (!recording) {
+					set.status = 404;
+					return { error: 'Not Found', message: 'Recording not found' };
+				}
+				const downloadUrl = await service.generateDownloadSignedUrl(recording.s3Key);
+				return { data: { ...recording, downloadUrl } };
+			}
 			const [recording] = await db
 				.select({
-					id: practiceRecording.id,
-					sessionId: practiceRecording.sessionId,
-					s3Key: practiceRecording.s3Key,
-					durationSeconds: practiceRecording.durationSeconds,
-					pronunciationScore: practiceRecording.pronunciationScore,
-					aiFeedback: practiceRecording.aiFeedback,
-					createdAt: practiceRecording.createdAt,
+					id: anonymousPracticeRecording.id,
+					sessionId: anonymousPracticeRecording.sessionId,
+					s3Key: anonymousPracticeRecording.s3Key,
+					durationSeconds: anonymousPracticeRecording.durationSeconds,
+					pronunciationScore: anonymousPracticeRecording.pronunciationScore,
+					aiFeedback: anonymousPracticeRecording.aiFeedback,
+					createdAt: anonymousPracticeRecording.createdAt,
 				})
-				.from(practiceRecording)
-				.innerJoin(practiceSession, eq(practiceRecording.sessionId, practiceSession.id))
+				.from(anonymousPracticeRecording)
+				.innerJoin(
+					anonymousPracticeSession,
+					eq(anonymousPracticeRecording.sessionId, anonymousPracticeSession.id),
+				)
 				.where(
-					and(eq(practiceRecording.id, params.id), eq(practiceSession.userId, user.id)),
+					and(
+						eq(anonymousPracticeRecording.id, params.id),
+						eq(anonymousPracticeSession.anonymousIdHash, anonymousIdHash!),
+					),
 				);
-
 			if (!recording) {
 				set.status = 404;
 				return { error: 'Not Found', message: 'Recording not found' };
 			}
-
 			const downloadUrl = await service.generateDownloadSignedUrl(recording.s3Key);
-
-			return {
-				data: {
-					...recording,
-					downloadUrl,
-				},
-			};
+			return { data: { ...recording, downloadUrl } };
 		},
 		{
-			// auth: true,
 			params: t.Object({
 				id: t.String({ format: 'uuid' }),
 			}),
@@ -940,23 +1077,24 @@ export const vocabularyModule = new Elysia({ prefix: '/api/vocabulary' })
 	// POST /api/vocabulary/quizzes/:id/attempts - Submit quiz attempt
 	.post(
 		'/quizzes/:id/attempts',
-		async ({ params, body, user, set }: any) => {
+		async ({ params, body, user, anonymousIdHash, set }: any) => {
+			if (!user && !anonymousIdHash) {
+				set.status = 401;
+				return { error: 'Unauthorized', message: 'Send JWT or X-Device-Id.' };
+			}
 			const [quizData] = await db
 				.select()
 				.from(quiz)
 				.where(and(eq(quiz.id, params.id), isNull(quiz.deletedAt)));
-
 			if (!quizData) {
 				set.status = 404;
 				return { error: 'Not Found', message: 'Quiz not found' };
 			}
-
 			const questions = await db
 				.select()
 				.from(quizQuestion)
 				.where(eq(quizQuestion.quizId, params.id))
 				.orderBy(asc(quizQuestion.createdAt));
-
 			if (questions.length !== body.answers.length) {
 				set.status = 400;
 				return {
@@ -964,34 +1102,39 @@ export const vocabularyModule = new Elysia({ prefix: '/api/vocabulary' })
 					message: 'Number of answers does not match number of questions',
 				};
 			}
-
 			let correctCount = 0;
 			for (let i = 0; i < questions.length; i++) {
 				if (questions[i].correctAnswerIndex === body.answers[i]) {
 					correctCount++;
 				}
 			}
-
 			const score = (correctCount / questions.length) * 100;
-
+			if (user) {
+				const [attempt] = await db
+					.insert(quizAttempt)
+					.values({
+						userId: user.id,
+						quizId: params.id,
+						score: score.toString(),
+						completedAt: new Date(),
+					})
+					.returning();
+				set.status = 201;
+				return { message: 'Quiz attempt submitted successfully', data: attempt };
+			}
 			const [attempt] = await db
-				.insert(quizAttempt)
+				.insert(anonymousQuizAttempt)
 				.values({
-					userId: user.id,
+					anonymousIdHash: anonymousIdHash!,
 					quizId: params.id,
 					score: score.toString(),
 					completedAt: new Date(),
 				})
 				.returning();
-
 			set.status = 201;
-			return {
-				message: 'Quiz attempt submitted successfully',
-				data: attempt,
-			};
+			return { message: 'Quiz attempt submitted successfully', data: attempt };
 		},
 		{
-			// auth: true,
 			params: t.Object({
 				id: t.String({ format: 'uuid' }),
 			}),
@@ -999,7 +1142,7 @@ export const vocabularyModule = new Elysia({ prefix: '/api/vocabulary' })
 			detail: {
 				tags: ['Quiz'],
 				summary: 'Submit quiz attempt',
-				description: 'Authenticated. Submit answer indices (0-based) for each question. Body prefilled.',
+				description: 'Submit quiz attempt (JWT or X-Device-Id)',
 				requestBody: {
 					content: {
 						'application/json': {
@@ -1014,26 +1157,34 @@ export const vocabularyModule = new Elysia({ prefix: '/api/vocabulary' })
 	// GET /api/vocabulary/quizzes/attempts - List quiz attempts
 	.get(
 		'/quizzes/attempts',
-		async ({ query, user }: any) => {
-			const limit = query.limit || 20;
-
-			const conditions = [eq(quizAttempt.userId, user.id)];
-
-			if (query.quizId) {
-				conditions.push(eq(quizAttempt.quizId, query.quizId));
+		async ({ query, user, anonymousIdHash, set }: any) => {
+			if (!user && !anonymousIdHash) {
+				set.status = 401;
+				return { error: 'Unauthorized', message: 'Send JWT or X-Device-Id.' };
 			}
-
+			const limit = query.limit || 20;
+			if (user) {
+				const conditions = [eq(quizAttempt.userId, user.id)];
+				if (query.quizId) conditions.push(eq(quizAttempt.quizId, query.quizId));
+				const attempts = await db
+					.select()
+					.from(quizAttempt)
+					.where(and(...conditions))
+					.orderBy(desc(quizAttempt.completedAt))
+					.limit(limit);
+				return { attempts };
+			}
+			const conditions = [eq(anonymousQuizAttempt.anonymousIdHash, anonymousIdHash!)];
+			if (query.quizId) conditions.push(eq(anonymousQuizAttempt.quizId, query.quizId));
 			const attempts = await db
 				.select()
-				.from(quizAttempt)
+				.from(anonymousQuizAttempt)
 				.where(and(...conditions))
-				.orderBy(desc(quizAttempt.completedAt))
+				.orderBy(desc(anonymousQuizAttempt.completedAt))
 				.limit(limit);
-
 			return { attempts };
 		},
 		{
-			// auth: true,
 			query: t.Object({
 				quizId: t.Optional(t.String({ format: 'uuid' })),
 				limit: t.Optional(t.Number({ minimum: 1, maximum: 100 })),
@@ -1041,7 +1192,7 @@ export const vocabularyModule = new Elysia({ prefix: '/api/vocabulary' })
 			detail: {
 				tags: ['Quiz'],
 				summary: 'List quiz attempts',
-				description: 'Get quiz attempts for the authenticated user',
+				description: 'List quiz attempts (JWT or X-Device-Id)',
 			},
 		},
 	)
@@ -1051,52 +1202,74 @@ export const vocabularyModule = new Elysia({ prefix: '/api/vocabulary' })
 	// POST /api/vocabulary/favorites - Add favorite
 	.post(
 		'/favorites',
-		async ({ body, user, set }: any) => {
+		async ({ body, user, anonymousIdHash, set }: any) => {
+			if (!user && !anonymousIdHash) {
+				set.status = 401;
+				return { error: 'Unauthorized', message: 'Send JWT or X-Device-Id.' };
+			}
+			if (user) {
+				const [favorite] = await db
+					.insert(favoriteItem)
+					.values({
+						userId: user.id,
+						itemType: body.itemType,
+						itemId: body.itemId,
+					})
+					.onConflictDoNothing({
+						target: [favoriteItem.userId, favoriteItem.itemType, favoriteItem.itemId],
+					})
+					.returning();
+				if (!favorite) {
+					const [existing] = await db
+						.select()
+						.from(favoriteItem)
+						.where(
+							and(
+								eq(favoriteItem.userId, user.id),
+								eq(favoriteItem.itemType, body.itemType),
+								eq(favoriteItem.itemId, body.itemId),
+							),
+						);
+					set.status = 200;
+					return { message: 'Favorite already exists', data: existing };
+				}
+				set.status = 201;
+				return { message: 'Favorite added successfully', data: favorite };
+			}
 			const [favorite] = await db
-				.insert(favoriteItem)
+				.insert(anonymousFavoriteItem)
 				.values({
-					userId: user.id,
+					anonymousIdHash: anonymousIdHash!,
 					itemType: body.itemType,
 					itemId: body.itemId,
 				})
 				.onConflictDoNothing({
-					target: [favoriteItem.userId, favoriteItem.itemType, favoriteItem.itemId],
+					target: [anonymousFavoriteItem.anonymousIdHash, anonymousFavoriteItem.itemType, anonymousFavoriteItem.itemId],
 				})
 				.returning();
-
 			if (!favorite) {
-				// Already exists, fetch it
 				const [existing] = await db
 					.select()
-					.from(favoriteItem)
+					.from(anonymousFavoriteItem)
 					.where(
 						and(
-							eq(favoriteItem.userId, user.id),
-							eq(favoriteItem.itemType, body.itemType),
-							eq(favoriteItem.itemId, body.itemId),
+							eq(anonymousFavoriteItem.anonymousIdHash, anonymousIdHash!),
+							eq(anonymousFavoriteItem.itemType, body.itemType),
+							eq(anonymousFavoriteItem.itemId, body.itemId),
 						),
 					);
-
 				set.status = 200;
-				return {
-					message: 'Favorite already exists',
-					data: existing,
-				};
+				return { message: 'Favorite already exists', data: existing };
 			}
-
 			set.status = 201;
-			return {
-				message: 'Favorite added successfully',
-				data: favorite,
-			};
+			return { message: 'Favorite added successfully', data: favorite };
 		},
 		{
-			// auth: true,
 			body: addFavoriteSchema,
 			detail: {
 				tags: ['Favorites'],
 				summary: 'Add favorite',
-				description: 'Authenticated. Add a vocabulary item or quiz to favorites. Body prefilled (replace itemId with a real UUID).',
+				description: 'Add favorite (JWT or X-Device-Id)',
 				requestBody: {
 					content: {
 						'application/json': {
@@ -1111,23 +1284,35 @@ export const vocabularyModule = new Elysia({ prefix: '/api/vocabulary' })
 	// DELETE /api/vocabulary/favorites/:itemType/:itemId - Remove favorite
 	.delete(
 		'/favorites/:itemType/:itemId',
-		async ({ params, user }: any) => {
+		async ({ params, user, anonymousIdHash, set }: any) => {
+			if (!user && !anonymousIdHash) {
+				set.status = 401;
+				return { error: 'Unauthorized', message: 'Send JWT or X-Device-Id.' };
+			}
+			if (user) {
+				await db
+					.delete(favoriteItem)
+					.where(
+						and(
+							eq(favoriteItem.userId, user.id),
+							eq(favoriteItem.itemType, params.itemType),
+							eq(favoriteItem.itemId, params.itemId),
+						),
+					);
+				return { message: 'Favorite removed successfully' };
+			}
 			await db
-				.delete(favoriteItem)
+				.delete(anonymousFavoriteItem)
 				.where(
 					and(
-						eq(favoriteItem.userId, user.id),
-						eq(favoriteItem.itemType, params.itemType),
-						eq(favoriteItem.itemId, params.itemId),
+						eq(anonymousFavoriteItem.anonymousIdHash, anonymousIdHash!),
+						eq(anonymousFavoriteItem.itemType, params.itemType),
+						eq(anonymousFavoriteItem.itemId, params.itemId),
 					),
 				);
-
-			return {
-				message: 'Favorite removed successfully',
-			};
+			return { message: 'Favorite removed successfully' };
 		},
 		{
-			// auth: true,
 			params: t.Object({
 				itemType: favoriteTypeEnum,
 				itemId: t.String({ format: 'uuid' }),
@@ -1135,7 +1320,7 @@ export const vocabularyModule = new Elysia({ prefix: '/api/vocabulary' })
 			detail: {
 				tags: ['Favorites'],
 				summary: 'Remove favorite',
-				description: 'Remove a vocabulary item or quiz from favorites',
+				description: 'Remove favorite (JWT or X-Device-Id)',
 			},
 		},
 	)
@@ -1143,26 +1328,34 @@ export const vocabularyModule = new Elysia({ prefix: '/api/vocabulary' })
 	// GET /api/vocabulary/favorites - List favorites
 	.get(
 		'/favorites',
-		async ({ query, user }: any) => {
-			const limit = query.limit || 20;
-
-			const conditions = [eq(favoriteItem.userId, user.id)];
-
-			if (query.itemType) {
-				conditions.push(eq(favoriteItem.itemType, query.itemType));
+		async ({ query, user, anonymousIdHash, set }: any) => {
+			if (!user && !anonymousIdHash) {
+				set.status = 401;
+				return { error: 'Unauthorized', message: 'Send JWT or X-Device-Id.' };
 			}
-
+			const limit = query.limit || 20;
+			if (user) {
+				const conditions = [eq(favoriteItem.userId, user.id)];
+				if (query.itemType) conditions.push(eq(favoriteItem.itemType, query.itemType));
+				const favorites = await db
+					.select()
+					.from(favoriteItem)
+					.where(and(...conditions))
+					.orderBy(desc(favoriteItem.createdAt))
+					.limit(limit);
+				return { favorites };
+			}
+			const conditions = [eq(anonymousFavoriteItem.anonymousIdHash, anonymousIdHash!)];
+			if (query.itemType) conditions.push(eq(anonymousFavoriteItem.itemType, query.itemType));
 			const favorites = await db
 				.select()
-				.from(favoriteItem)
+				.from(anonymousFavoriteItem)
 				.where(and(...conditions))
-				.orderBy(desc(favoriteItem.createdAt))
+				.orderBy(desc(anonymousFavoriteItem.createdAt))
 				.limit(limit);
-
 			return { favorites };
 		},
 		{
-			// auth: true,
 			query: t.Object({
 				itemType: t.Optional(favoriteTypeEnum),
 				limit: t.Optional(t.Number({ minimum: 1, maximum: 100 })),
@@ -1170,7 +1363,7 @@ export const vocabularyModule = new Elysia({ prefix: '/api/vocabulary' })
 			detail: {
 				tags: ['Favorites'],
 				summary: 'List favorites',
-				description: 'Get favorites for the authenticated user',
+				description: 'List favorites (JWT or X-Device-Id)',
 			},
 		},
 	);

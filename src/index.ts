@@ -12,7 +12,7 @@ const server = app.listen({
 });
 
 // Startup logs
-appLogger.info(`[SERVER] Running at ${env.HOST}:${env.PORT}`);
+appLogger.info(`[SERVER] APP_ENV=${env.APP_ENV} Running at ${env.HOST}:${env.PORT}`);
 appLogger.info(`[API] Documentation available at ${env.HOST}:${env.PORT}/docs`);
 appLogger.info(`[HEALTH] Health check endpoint: ${env.HOST}:${env.PORT}/health`);
 
