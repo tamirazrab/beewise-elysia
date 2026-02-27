@@ -471,6 +471,7 @@ export function validateEnv(): Env {
 		OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: process.env['OTEL_EXPORTER_OTLP_METRICS_ENDPOINT'] ?? '',
 		OTEL_SERVICE_NAME: process.env['OTEL_SERVICE_NAME'] ?? 'beewise-api',
 		OTEL_SERVICE_VERSION: process.env['OTEL_SERVICE_VERSION'] ?? '1.0.0',
+    DB_SSL_CERT: process.env['DB_SSL_CERT'] ?? '',
 	};
 
 	// Validate against schema
