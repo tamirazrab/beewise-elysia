@@ -10,27 +10,27 @@ import { appLogger } from "../logger";
  *   still work (e.g. in containers where the cert is not mounted).
  */
 export function getSslConfig(env: { APP_ENV: string, DB_SSL_CERT: string }): false | { ca: string, rejectUnauthorized: true } | { rejectUnauthorized: false } {
-	if (env.APP_ENV === 'local') {
-    const certPath = fileURLToPath(new URL('../../certs/coolify-db.pem', import.meta.url));
-    const cert = readFileSync(certPath).toString();
+	// if (env.APP_ENV === 'local') {
+  //   const certPath = fileURLToPath(new URL('../../certs/coolify-db.pem', import.meta.url));
+  //   const cert = readFileSync(certPath).toString();
 
-    appLogger.info({ certPath }, '[SSL] Certificate found at path');
+  //   appLogger.info({ certPath }, '[SSL] Certificate found at path');
 
-    appLogger.info({ cert }, '[SSL] Certificate content');
+  //   appLogger.info({ cert }, '[SSL] Certificate content');
 
-    if(!cert) {
-      appLogger.error({ error: new Error('No certificate found at path') }, '[SSL] No certificate found at path');
+  //   if(!cert) {
+  //     appLogger.error({ error: new Error('No certificate found at path') }, '[SSL] No certificate found at path');
 
-      return {
-        rejectUnauthorized: false
-      };
-    }
+  //     return {
+  //       rejectUnauthorized: false
+  //     };
+  //   }
 
-    return {
-			ca: cert,
-      rejectUnauthorized: true
-		};
-	}
+  //   return {
+	// 		ca: cert,
+  //     rejectUnauthorized: true
+	// 	};
+	// }
 
 	// if (env.DB_SSL_CERT) {
 	// 	return {
