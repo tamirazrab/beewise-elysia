@@ -32,16 +32,12 @@ export function getSslConfig(env: { APP_ENV: string, DB_SSL_CERT: string }): fal
 		};
 	}
 
-  appLogger.info({ env }, '[SSL] env');
-
-	if (env.DB_SSL_CERT) {
-    appLogger.info({ DB_SSL_CERT: env.DB_SSL_CERT }, '[SSL] DB_SSL_CERT found');
-
-		return {
-			ca: env.DB_SSL_CERT,
-      rejectUnauthorized: true
-		};
-	}
+	// if (env.DB_SSL_CERT) {
+	// 	return {
+	// 		ca: env.DB_SSL_CERT,
+  //     rejectUnauthorized: true
+	// 	};
+	// }
 
 	// No CA file (e.g. cert not mounted in container): still use SSL, skip cert verification
 	return { rejectUnauthorized: false };
