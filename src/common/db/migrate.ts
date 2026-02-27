@@ -1,19 +1,12 @@
+import { env } from '@common/config/env';
 import { appLogger } from '@common/logger';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import postgres from 'postgres';
-import { readFileSync } from 'node:fs';
-import { env } from '@common/config/env';
+import { getSslConfig } from './ssl';
 
 const DATABASE_URL = env.DATABASE_URL;
-
-const ssl =
-	env.APP_ENV === 'local'
-		? false
-		: {
-				ca: readFileSync(new URL('../../certs/coolify-db.pem', import.meta.url)).toString(),
-				rejectUnauthorized: false,
-		  };
+const ssl = getSslConfig(env);
 
 /**
  * Run all pending database migrations from the ./drizzle folder.

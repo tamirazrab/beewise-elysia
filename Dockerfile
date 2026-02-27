@@ -19,6 +19,8 @@ COPY --from=build /app/dist ./dist
 COPY --from=build /app/package.json ./
 COPY --from=build /app/drizzle ./drizzle
 COPY --from=build /app/src ./src
+# Certs dir (src/certs/.gitkeep in repo). For coolify-db.pem use Coolify build secret or runtime mount.
+# COPY --from=build /app/src/certs ./src/certs
 COPY --from=build /app/tsconfig.json ./
 COPY --from=build /app/entrypoint.sh ./entrypoint.sh
 
