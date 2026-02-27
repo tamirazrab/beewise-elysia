@@ -13,6 +13,7 @@ import {
 import { paidAIChatModule, paidUsageModule } from '@modules/paid-ai-chat';
 import { paidVoiceModule } from '@modules/paid-voice';
 import { vocabularyModule } from '@modules/vocabulary';
+import { userModule } from '@modules/user';
 import { speakPracticeModule } from '@modules/speak-practice';
 import { voiceChatModule } from '@modules/voice-chat';
 import { trialModule } from '@modules/trial';
@@ -85,7 +86,8 @@ export const createApp = () => {
             { name: 'Auth', description: 'Sign up, sign in, sign out, password reset (Better Auth)' },
             { name: 'Free AI Chat', description: 'Free-tier conversation sessions and messages' },
             { name: 'Paid AI Chat', description: 'Paid-tier AI chat sessions and usage' },
-            { name: 'Vocabulary', description: 'Vocabulary items CRUD (admin) and listing' },
+          { name: 'Vocabulary', description: 'Vocabulary items CRUD (admin) and listing' },
+          { name: 'Users', description: 'User profile APIs (self)' },
             { name: 'Speak Practice', description: 'Sentence practice by language and level' },
             { name: 'Progress', description: 'User vocabulary progress and review items' },
             { name: 'Practice', description: 'Speaking/listening practice sessions and recordings' },
@@ -162,6 +164,7 @@ export const createApp = () => {
     .use(paidUsageModule)
     .use(paidVoiceModule)
     .use(vocabularyModule)
+    .use(userModule)
     .use(speakPracticeModule)
     .use(voiceChatModule)
     .use(trialRateLimit)

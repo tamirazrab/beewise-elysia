@@ -8,7 +8,7 @@ import { getSslConfig } from './ssl';
  * Database connection and ORM setup
  */
 
-const ssl = getSslConfig(env);
+const ssl = getSslConfig({ APP_ENV: env.APP_ENV, DB_SSL_CERT: env.DB_SSL_CERT ?? '' });
 
 const client = postgres(env.DATABASE_URL, {
 	max: 10,

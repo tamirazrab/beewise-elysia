@@ -38,6 +38,13 @@ const EnvSchema = Type.Object({
 		default: 'postgresql://localhost:5432/beewise',
 	}),
 
+  DB_SSL_CERT: Type.Optional(
+    Type.String({
+      description: 'SSL certificate content',
+      default: '',
+    }),
+  ),
+
 	// Authentication
 	ENABLE_AUTH: Type.Boolean({
 		default: true,
