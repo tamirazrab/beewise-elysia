@@ -4,100 +4,15 @@ import {
 	conversationMessage,
 	userUsageDaily,
 	userUsageMonthly,
-	freeSubscriptionStatus,
-	type ConversationSession,
-	type ConversationMessage,
 } from '@common/db/schema';
 import { env } from '@common/config/env';
-import { BedrockRuntimeClient, ConverseCommand, Message } from '@aws-sdk/client-bedrock-runtime';
+import { estimateTokenCountSync, invokeBedrockChat } from '@common/llm/bedrock';
 import { eq, and, desc, sql } from 'drizzle-orm';
 
 /**
  * Free AI Chat Service
  * Handles Bedrock integration, usage tracking, limits, and message pruning
  */
-
-let bedrockClient: BedrockRuntimeClient | null = null;
-
-function getBedrockClient(): BedrockRuntimeClient {
-	if (bedrockClient) {
-		return bedrockClient;
-	}
-
-	const accessKeyId = env.AWS_ACCESS_KEY_ID;
-	const secretAccessKey = env.AWS_SECRET_ACCESS_KEY;
-
-	if (!accessKeyId || !secretAccessKey) {
-		throw new Error(
-			'AWS credentials not configured. Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY in environment variables.',
-		);
-	}
-
-	bedrockClient = new BedrockRuntimeClient({
-		region: env.AWS_REGION,
-		credentials: {
-			accessKeyId,
-			secretAccessKey,
-		},
-	});
-
-	return bedrockClient;
-}
-
-export interface BedrockResponse {
-	content: string;
-	tokensUsed: number;
-	costUsd: number;
-}
-
-export async function estimateTokenCount(text: string): Promise<number> {
-	return Math.ceil(text.length / 4);
-}
-
-export async function invokeBedrock(
-	messages: Array<{ role: string; content: string }>,
-	systemPrompt: string,
-): Promise<BedrockResponse> {
-	const converseMessages: Message[] = messages
-		.filter((msg) => msg.role !== 'system')
-		.map((msg): Message => ({
-			role: msg.role === 'user' ? 'user' : 'assistant',
-			content: [{ text: msg.content }],
-		}));
-
-	const allText = systemPrompt + '\n\n' + messages.map((m) => m.content).join('\n');
-	const estimatedInputTokens = await estimateTokenCount(allText);
-
-	const command = new ConverseCommand({
-		modelId: env.BEDROCK_MODEL_ID,
-		system: [{ text: systemPrompt }],
-		messages: converseMessages,
-		inferenceConfig: {
-			maxTokens: 1000,
-			temperature: 0.7,
-			topP: 0.9,
-		},
-	});
-
-	const client = getBedrockClient();
-	const response = await client.send(command);
-
-	const outputText =
-		response.output?.message?.content
-			?.filter((block: any) => block.text != null)
-			.map((block: any) => block.text)
-			.join('') || '';
-
-	const outputTokens = await estimateTokenCount(outputText);
-	const totalTokens = estimatedInputTokens + outputTokens;
-	const costUsd = (totalTokens / 1000) * parseFloat(env.BEDROCK_COST_PER_1K_TOKENS);
-
-	return {
-		content: outputText.trim(),
-		tokensUsed: totalTokens,
-		costUsd,
-	};
-}
 
 export async function getSessionMessages(
 	sessionId: string,
@@ -142,66 +57,41 @@ export async function saveMessage(
 }
 
 export async function pruneMessages(sessionId: string): Promise<void> {
-	const maxMessages = parseInt(env.MAX_MESSAGES_PER_SESSION);
+	const maxMessages = parseInt(env.MAX_MESSAGES_PER_SESSION, 10);
 
-	const messageCount = await db
-		.select({ count: sql<number>`count(*)` })
-		.from(conversationMessage)
-		.where(eq(conversationMessage.sessionId, sessionId));
-
-	const count = messageCount[0]?.count || 0;
-
-	if (count <= maxMessages) {
-		return;
-	}
-
-	const messagesToKeep = await db
-		.select({ id: conversationMessage.id })
+	// Select messages to delete (everything older than the most recent N)
+	const messagesToDelete = await db
+		.select({
+			id: conversationMessage.id,
+			tokenCount: conversationMessage.tokenCount,
+		})
 		.from(conversationMessage)
 		.where(eq(conversationMessage.sessionId, sessionId))
 		.orderBy(desc(conversationMessage.createdAt))
-		.limit(maxMessages);
+		.offset(maxMessages);
 
-	const idsToKeep = messagesToKeep.map((m) => m.id);
-
-	if (idsToKeep.length === 0) {
+	if (messagesToDelete.length === 0) {
 		return;
 	}
 
-	const deletedMessages = await db
+	const idsToDelete = messagesToDelete.map((m) => m.id);
+	const totalDeletedTokens = messagesToDelete.reduce(
+		(sum, msg) => sum + (msg.tokenCount || 0),
+		0,
+	);
+
+	await db
 		.delete(conversationMessage)
-		.where(
-			and(
-				eq(conversationMessage.sessionId, sessionId),
-				sql`${conversationMessage.id} != ALL(${idsToKeep})`,
-			),
-		)
-		.returning({ tokenCount: conversationMessage.tokenCount });
+		.where(sql`${conversationMessage.id} = ANY(${idsToDelete})`);
 
-	const totalDeletedTokens = deletedMessages.reduce((sum, msg) => sum + (msg.tokenCount || 0), 0);
-
-	const currentSession = await db
-		.select({
-			totalMessages: conversationSession.totalMessages,
-			totalTokensUsed: conversationSession.totalTokensUsed,
+	await db
+		.update(conversationSession)
+		.set({
+			totalMessages: sql`${conversationSession.totalMessages} - ${idsToDelete.length}`,
+			totalTokensUsed: sql`${conversationSession.totalTokensUsed} - ${totalDeletedTokens}`,
+			updatedAt: new Date(),
 		})
-		.from(conversationSession)
-		.where(eq(conversationSession.id, sessionId))
-		.limit(1);
-
-	if (currentSession[0]) {
-		const newTotalMessages = Math.max(0, count - (count - idsToKeep.length));
-		const newTotalTokens = Math.max(0, (currentSession[0].totalTokensUsed || 0) - totalDeletedTokens);
-
-		await db
-			.update(conversationSession)
-			.set({
-				totalMessages: newTotalMessages,
-				totalTokensUsed: newTotalTokens,
-				updatedAt: new Date(),
-			})
-			.where(eq(conversationSession.id, sessionId));
-	}
+		.where(eq(conversationSession.id, sessionId));
 }
 
 export const FREE_TIER_LIMITS = {
@@ -374,3 +264,6 @@ Rules:
 - Be encouraging and supportive. Help with vocabulary and phrasing when useful.
 - Keep responses clear and at a level appropriate for a learner.`;
 }
+
+// Backwards-compatible re-exports for callers that previously imported from this module
+export { invokeBedrockChat as invokeBedrock, estimateTokenCountSync as estimateTokenCount };

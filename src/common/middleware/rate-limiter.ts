@@ -1,5 +1,6 @@
 import { env } from '@common/config/env';
 import { appLogger } from '@common/logger';
+import { getClientIP } from '@common/utils/request-ip';
 import { Elysia } from 'elysia';
 import { LRUCache } from 'lru-cache';
 
@@ -13,14 +14,6 @@ const authCache = new LRUCache<string, number[]>({
 	max: 1000,
 	ttl: env.AUTH_RATE_LIMIT_WINDOW_MS ?? 60000,
 });
-
-const getClientIP = (req: Request): string => {
-	return (
-		req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
-		req.headers.get('x-real-ip') ||
-		'127.0.0.1'
-	);
-};
 
 export const createRateLimiter = (options: {
 	max: number;

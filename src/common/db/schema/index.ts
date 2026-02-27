@@ -9,6 +9,7 @@
  * - paid-voice.ts: Paid voice (OpenAI Realtime) tables
  * - trial.ts: Trial (unauthenticated) chat and voice tables
  * - anonymous-vocabulary.ts: Anonymous (device-id) vocabulary progress, favorites, practice, quiz
+ * - speak-practice.ts: Speak practice sentences by language and level
  */
 
 export * from './auth';
@@ -17,5 +18,6 @@ export * from './free-ai-chat';
 export * from './paid-ai-chat';
 export * from './paid-voice';
 export * from './vocabulary';
+export * from './speak-practice';
 export * from './voice-chat';
 export * from './trial';

@@ -11,7 +11,7 @@ import {
 import { env } from '@common/config/env';
 import { appLogger } from '@common/logger';
 import { eq, and, desc, sql, gte } from 'drizzle-orm';
-import { estimateTokenCount, invokeBedrock } from '@modules/free-ai-chat/service';
+import { estimateTokenCountSync, invokeBedrockChat } from '@common/llm/bedrock';
 
 const TRIAL_SYSTEM_PROMPT =
 	'You are a helpful language learning assistant. Keep responses concise and encouraging. Help the user practice the language.';
@@ -71,7 +71,7 @@ export async function checkIpAbuse(ipHash: string): Promise<boolean> {
 			{ err, ipHash: '[redacted]' },
 			'Trial: checkIpAbuse query failed (trial_identity table may be missing). Run: bun run db:migrate',
 		);
-		return false;
+		return true; // fail-closed: treat as abused when DB/query fails
 	}
 }
 
@@ -127,6 +127,14 @@ export async function getTrialChatSession(
 		)
 		.limit(1);
 	return row ?? null;
+}
+
+export async function getTrialSessionCountByHash(trialIdHash: string): Promise<number> {
+	const [row] = await db
+		.select({ count: sql<number>`count(*)::int` })
+		.from(trialConversationSession)
+		.where(eq(trialConversationSession.trialIdHash, trialIdHash));
+	return row?.count ?? 0;
 }
 
 export async function listTrialSessionsByHash(
@@ -210,16 +218,19 @@ export async function sendTrialChatMessage(
 	const session = await getTrialChatSession(sessionId, trialIdHash);
 	if (!session) throw new Error('Session not found');
 
-	const userTokens = await estimateTokenCount(userContent);
+	const userTokens = estimateTokenCountSync(userContent);
 	const maxPerRequest = env.TRIAL_CHAT_MAX_TOKENS_PER_REQUEST ?? 500;
 	if (userTokens > maxPerRequest) {
 		throw new Error(`Message too long (max ${maxPerRequest} tokens).`);
 	}
 
 	const history = await getTrialSessionMessages(sessionId);
-	const messages = [...history.map((m) => ({ role: m.role, content: m.content })), { role: 'user' as const, content: userContent }];
+	const messages = [
+		...history.map((m) => ({ role: m.role, content: m.content })),
+		{ role: 'user' as const, content: userContent },
+	];
 
-	const response = await invokeBedrock(messages, TRIAL_SYSTEM_PROMPT);
+	const response = await invokeBedrockChat(messages, TRIAL_SYSTEM_PROMPT);
 
 	await addTrialMessage(sessionId, 'user', userContent, userTokens);
 	await addTrialMessage(sessionId, 'assistant', response.content, response.tokensUsed - userTokens);
@@ -296,7 +307,7 @@ export async function sendFreeAnonymousChatMessage(
 	const session = await getTrialChatSession(sessionId, anonymousIdHash);
 	if (!session) throw new Error('Session not found');
 
-	const userTokens = await estimateTokenCount(userContent);
+	const userTokens = estimateTokenCountSync(userContent);
 	const maxPerRequest = env.FREE_ANONYMOUS_CHAT_MAX_TOKENS_PER_REQUEST ?? 2000;
 	if (userTokens > maxPerRequest) {
 		throw new Error(`Message too long (max ${maxPerRequest} tokens).`);
@@ -307,7 +318,7 @@ export async function sendFreeAnonymousChatMessage(
 		...history.map((m) => ({ role: m.role, content: m.content })),
 		{ role: 'user' as const, content: userContent },
 	];
-	const response = await invokeBedrock(messages, TRIAL_SYSTEM_PROMPT);
+	const response = await invokeBedrockChat(messages, TRIAL_SYSTEM_PROMPT);
 
 	await addTrialMessage(sessionId, 'user', userContent, userTokens);
 	await addTrialMessage(sessionId, 'assistant', response.content, response.tokensUsed - userTokens);

@@ -1,6 +1,7 @@
 import WebSocket from 'ws';
 import { env } from '@common/config/env';
 import { appLogger } from '@common/logger';
+import { getCurrentSpan } from '@elysiajs/opentelemetry';
 
 const OPENAI_REALTIME_URL = 'wss://api.openai.com/v1/realtime?model=gpt-realtime';
 
@@ -50,6 +51,35 @@ export function createGPTRealtimeProxy(params: GPTRealtimeProxyParams): {
 	const { languageCode, sendToClient, onClose, onError } = params;
 	const apiKey = env.OPENAI_API_KEY;
 
+	// In test mode, avoid opening a real OpenAI WebSocket connection.
+	if (env.NODE_ENV === 'test') {
+		let closed = false;
+		return {
+			open() {
+				if (closed) return;
+				const instructions = buildInstructions(languageCode);
+				const stubEvent = {
+					type: 'stubbed_openai_voice',
+					instructionsPreview: instructions.slice(0, 40),
+				};
+				try {
+					sendToClient(JSON.stringify(stubEvent));
+				} catch (err) {
+					onError(err instanceof Error ? err : new Error(String(err)));
+				}
+			},
+			pushAudio() {
+				// No-op in tests
+			},
+			close() {
+				if (!closed) {
+					closed = true;
+					onClose();
+				}
+			},
+		};
+	}
+
 	if (!apiKey) {
 		onError(new Error('OPENAI_API_KEY not configured'));
 		return { open: () => {}, pushAudio: () => {}, close: () => {} };
@@ -95,8 +125,14 @@ export function createGPTRealtimeProxy(params: GPTRealtimeProxyParams): {
 		});
 
 		openaiWs.on('error', (err) => {
+			const e = err instanceof Error ? err : new Error(String(err));
+			const span = getCurrentSpan();
+			if (span) {
+				span.recordException(e);
+				span.setStatus({ code: 2, message: e.message });
+			}
 			appLogger.error({ err }, 'Paid voice: OpenAI WebSocket error');
-			onError(err instanceof Error ? err : new Error(String(err)));
+			onError(e);
 		});
 
 		openaiWs.on('close', () => {

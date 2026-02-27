@@ -1,3 +1,4 @@
+import { env } from '@common/config/env';
 import { withAuth } from '@common/middleware/auth-guard';
 import { Elysia, t } from 'elysia';
 import { db } from '@common/db';
@@ -101,12 +102,30 @@ export const paidAIChatModule = withAuth(new Elysia({ prefix: '/api/paid' }))
 				return { error: 'Not Found', message: 'Session not found' };
 			}
 
-			const messages = [
-				{ role: 'system' as const, content: service.SYSTEM_PROMPT },
-				{ role: 'user' as const, content: body.content },
+			const history = await service.getPaidSessionMessages(session.id);
+			const historyMessages: Array<{ role: 'user' | 'assistant'; content: string }> = history.map(
+				(m) => ({
+					role: m.role as 'user' | 'assistant',
+					content: m.content,
+				}),
+			);
+			const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
+				{ role: 'system', content: service.SYSTEM_PROMPT },
+				...historyMessages,
+				{ role: 'user', content: body.content },
 			];
 
 			const openaiResponse = await service.invokeOpenAI(messages);
+
+			const userTokenCount = Math.ceil(body.content.length / 4);
+			const assistantTokenCount = openaiResponse.tokensUsed - userTokenCount;
+			await service.savePaidMessage(session.id, 'user', body.content, userTokenCount);
+			await service.savePaidMessage(
+				session.id,
+				'assistant',
+				openaiResponse.content,
+				assistantTokenCount,
+			);
 
 			await db
 				.update(paidAISession)
@@ -147,6 +166,7 @@ export const paidAIChatModule = withAuth(new Elysia({ prefix: '/api/paid' }))
 				content: t.String({
 					description: 'User message to send to the AI',
 					default: "What are some common Spanish greetings?",
+					maxLength: env.CHAT_MESSAGE_MAX_CHARS ?? 4096,
 				}),
 			}),
 			detail: {
@@ -227,14 +247,16 @@ export const paidUsageModule = withAuth(new Elysia({ prefix: '/api/paid' }))
 				.limit(limit)
 				.offset(offset);
 
-			const total = await db
-				.select({ count: t.Number() })
-				.from(paidAIUsage)
-				.where(eq(paidAIUsage.userId, user.id));
+			const countRow = (
+				await db
+					.select({ count: sql<number>`count(*)::int` })
+					.from(paidAIUsage)
+					.where(eq(paidAIUsage.userId, user.id))
+			)[0];
 
 			return {
 				usage,
-				total: Number(count),
+				total: Number(countRow?.count ?? 0),
 			};
 		},
 		{

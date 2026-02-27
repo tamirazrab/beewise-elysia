@@ -251,6 +251,14 @@ const EnvSchema = Type.Object({
 		description: 'Max tokens per request',
 		default: '2000',
 	}),
+	CHAT_MESSAGE_MAX_CHARS: Type.Number({
+		description: 'Max characters per user message in free and paid chat (LLM-style limit)',
+		default: 4096,
+	}),
+	PAID_MAX_MESSAGES_IN_CONTEXT: Type.Number({
+		description: 'Max conversation messages to send to OpenAI for paid chat context',
+		default: 20,
+	}),
 
 	// Trial (unauthenticated) limits and abuse protection
 	TRIAL_CHAT_MAX_SESSIONS: Type.Number({
@@ -307,6 +315,32 @@ const EnvSchema = Type.Object({
 		description: 'Max free anonymous voice seconds per identity (lifetime)',
 		default: 600,
 	}),
+
+	// OpenTelemetry (SigNoz / OTLP)
+	OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: Type.Optional(
+		Type.String({
+			description: 'OTLP traces endpoint (e.g. http://signoz:4318/v1/traces)',
+			default: '',
+		}),
+	),
+	OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: Type.Optional(
+		Type.String({
+			description: 'OTLP metrics endpoint (e.g. http://signoz:4318/v1/metrics)',
+			default: '',
+		}),
+	),
+	OTEL_SERVICE_NAME: Type.Optional(
+		Type.String({
+			description: 'Service name for telemetry resource',
+			default: 'beewise-api',
+		}),
+	),
+	OTEL_SERVICE_VERSION: Type.Optional(
+		Type.String({
+			description: 'Service version for telemetry resource',
+			default: '1.0.0',
+		}),
+	),
 });
 
 export type Env = Static<typeof EnvSchema>;
@@ -381,6 +415,12 @@ export function validateEnv(): Env {
 		MONTHLY_SESSION_LIMIT: process.env['MONTHLY_SESSION_LIMIT'] || '10',
 		MAX_MESSAGES_PER_SESSION: process.env['MAX_MESSAGES_PER_SESSION'] || '20',
 		MAX_TOKENS_PER_REQUEST: process.env['MAX_TOKENS_PER_REQUEST'] || '2000',
+		CHAT_MESSAGE_MAX_CHARS: process.env['CHAT_MESSAGE_MAX_CHARS']
+			? Number(process.env['CHAT_MESSAGE_MAX_CHARS'])
+			: 4096,
+		PAID_MAX_MESSAGES_IN_CONTEXT: process.env['PAID_MAX_MESSAGES_IN_CONTEXT']
+			? Number(process.env['PAID_MAX_MESSAGES_IN_CONTEXT'])
+			: 20,
 		TRIAL_CHAT_MAX_SESSIONS: process.env['TRIAL_CHAT_MAX_SESSIONS']
 			? Number(process.env['TRIAL_CHAT_MAX_SESSIONS'])
 			: 1,
@@ -420,6 +460,10 @@ export function validateEnv(): Env {
 		FREE_ANONYMOUS_VOICE_MAX_SECONDS: process.env['FREE_ANONYMOUS_VOICE_MAX_SECONDS']
 			? Number(process.env['FREE_ANONYMOUS_VOICE_MAX_SECONDS'])
 			: 600,
+		OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: process.env['OTEL_EXPORTER_OTLP_TRACES_ENDPOINT'] ?? '',
+		OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: process.env['OTEL_EXPORTER_OTLP_METRICS_ENDPOINT'] ?? '',
+		OTEL_SERVICE_NAME: process.env['OTEL_SERVICE_NAME'] ?? 'beewise-api',
+		OTEL_SERVICE_VERSION: process.env['OTEL_SERVICE_VERSION'] ?? '1.0.0',
 	};
 
 	// Validate against schema

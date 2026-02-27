@@ -5,6 +5,8 @@ import {
 } from '@aws-sdk/client-bedrock-runtime';
 import { env } from '@common/config/env';
 import { appLogger } from '@common/logger';
+import { recordExternalCall } from '@common/otel/metrics';
+import { getCurrentSpan } from '@elysiajs/opentelemetry';
 
 /**
  * Voice Chat Stream Service
@@ -269,6 +271,28 @@ export async function runBedrockVoiceStream(params: StreamSessionParams): Promis
 	const audioQueue = createAudioQueue();
 
 	const systemPrompt = buildVoiceSystemPrompt(languageCode);
+
+	// In test mode, avoid real Bedrock calls and emit stub events.
+	if (env.NODE_ENV === 'test') {
+		(async () => {
+			try {
+				onOutput({
+					event: 'stubbed_voice_start',
+					userId,
+					sessionId,
+					languageCode,
+					systemPromptPreview: systemPrompt.slice(0, 40),
+				});
+			} catch (err) {
+				onError(err instanceof Error ? err : new Error(String(err)));
+			} finally {
+				audioQueue.close();
+				onEnd();
+			}
+		})();
+		return audioQueue;
+	}
+
 	const inputStream = createInputStream(systemPrompt, audioQueue);
 
 	const client = getBedrockClient();
@@ -305,6 +329,12 @@ export async function runBedrockVoiceStream(params: StreamSessionParams): Promis
 				}
 			}
 		} catch (err) {
+			recordExternalCall('bedrock_voice', 0, false);
+			const span = getCurrentSpan();
+			if (span) {
+				span.recordException(err instanceof Error ? err : new Error(String(err)));
+				span.setStatus({ code: 2, message: String(err) });
+			}
 			appLogger.error({ err, userId, sessionId }, 'Bedrock voice stream error');
 			onError(err instanceof Error ? err : new Error(String(err)));
 		} finally {

@@ -15,6 +15,17 @@ export const paidAISession = pgTable('paid_ai_session', {
 	lastMessageAt: timestamp('last_message_at').notNull().defaultNow(),
 });
 
+export const paidAIMessage = pgTable('paid_ai_message', {
+	id: uuid('id').primaryKey().defaultRandom(),
+	sessionId: uuid('session_id')
+		.notNull()
+		.references(() => paidAISession.id, { onDelete: 'cascade' }),
+	role: text('role').notNull(), // 'user' | 'assistant'
+	content: text('content').notNull(),
+	tokenCount: integer('token_count').notNull().default(0),
+	createdAt: timestamp('created_at').notNull().defaultNow(),
+});
+
 export const paidAIUsage = pgTable('paid_ai_usage', {
 	id: uuid('id').primaryKey().defaultRandom(),
 	userId: text('user_id')
@@ -28,5 +39,7 @@ export const paidAIUsage = pgTable('paid_ai_usage', {
 
 export type PaidAISession = typeof paidAISession.$inferSelect;
 export type NewPaidAISession = typeof paidAISession.$inferInsert;
+export type PaidAIMessage = typeof paidAIMessage.$inferSelect;
+export type NewPaidAIMessage = typeof paidAIMessage.$inferInsert;
 export type PaidAIUsage = typeof paidAIUsage.$inferSelect;
 export type NewPaidAIUsage = typeof paidAIUsage.$inferInsert;

@@ -1,5 +1,10 @@
 import { getTextLlmCost } from '@common/config/openai-pricing';
 import { env } from '@common/config/env';
+import { db } from '@common/db';
+import { paidAIMessage } from '@common/db/schema';
+import { recordExternalCall } from '@common/otel/metrics';
+import { record } from '@elysiajs/opentelemetry';
+import { eq, desc } from 'drizzle-orm';
 import OpenAI from 'openai';
 
 /**
@@ -25,39 +30,92 @@ Be encouraging, correct mistakes gently, and provide explanations when appropria
 export async function invokeOpenAI(
 	messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
 ): Promise<OpenAIResponse> {
-	const response = await openai.chat.completions.create({
-		model: env.OPENAI_MODEL,
-		messages: messages.map((msg) => ({
-			role: msg.role,
-			content: msg.content,
-		})),
-		temperature: 1,
+	// In test mode, avoid real OpenAI calls and return a deterministic stub.
+	if (env.NODE_ENV === 'test') {
+		const combined = messages.map((m) => m.content).join('\n').slice(0, 200);
+		const tokensUsed = combined.length > 0 ? Math.ceil(combined.length / 4) : 1;
+		return {
+			content: `[stubbed-openai-response]: ${combined}`,
+			tokensUsed,
+			costUsd: 0,
+		};
+	}
+
+	const start = Date.now();
+	try {
+		const result = await record('openai.chat.completions', async () => {
+			const response = await openai.chat.completions.create({
+				model: env.OPENAI_MODEL,
+				messages: messages.map((msg) => ({
+					role: msg.role,
+					content: msg.content,
+				})),
+				temperature: 1,
+			});
+
+			const choice = response.choices[0];
+			if (!choice || !choice.message) {
+				throw new Error('No response from OpenAI');
+			}
+
+			const inputTokens = response.usage?.prompt_tokens ?? 0;
+			const outputTokens = response.usage?.completion_tokens ?? 0;
+			const totalTokens = inputTokens + outputTokens;
+
+			const usage = response.usage as { prompt_tokens_details?: { cached_tokens?: number } } | undefined;
+			const cachedInputTokens = usage?.prompt_tokens_details?.cached_tokens ?? 0;
+
+			let costUsd = getTextLlmCost(env.OPENAI_MODEL, inputTokens, outputTokens, cachedInputTokens);
+			if (costUsd === 0 && totalTokens > 0) {
+				costUsd =
+					(inputTokens / 1_000_000) * Number.parseFloat(env.OPENAI_INPUT_COST_PER_1M) +
+					(outputTokens / 1_000_000) * Number.parseFloat(env.OPENAI_OUTPUT_COST_PER_1M);
+			}
+
+			return {
+				content: choice.message.content || '',
+				tokensUsed: totalTokens,
+				costUsd,
+			};
+		});
+		recordExternalCall('openai', Date.now() - start, true);
+		return result;
+	} catch (e) {
+		recordExternalCall('openai', Date.now() - start, false);
+		throw e;
+	}
+}
+
+const PAID_MAX_MESSAGES_IN_CONTEXT = env.PAID_MAX_MESSAGES_IN_CONTEXT ?? 20;
+
+export async function getPaidSessionMessages(
+	sessionId: string,
+	limit: number = PAID_MAX_MESSAGES_IN_CONTEXT,
+): Promise<Array<{ role: string; content: string }>> {
+	const rows = await db
+		.select({
+			role: paidAIMessage.role,
+			content: paidAIMessage.content,
+		})
+		.from(paidAIMessage)
+		.where(eq(paidAIMessage.sessionId, sessionId))
+		.orderBy(desc(paidAIMessage.createdAt))
+		.limit(limit);
+	return rows.reverse();
+}
+
+export async function savePaidMessage(
+	sessionId: string,
+	role: 'user' | 'assistant',
+	content: string,
+	tokenCount: number,
+): Promise<void> {
+	await db.insert(paidAIMessage).values({
+		sessionId,
+		role,
+		content,
+		tokenCount,
 	});
-
-	const choice = response.choices[0];
-	if (!choice || !choice.message) {
-		throw new Error('No response from OpenAI');
-	}
-
-	const inputTokens = response.usage?.prompt_tokens ?? 0;
-	const outputTokens = response.usage?.completion_tokens ?? 0;
-	const totalTokens = inputTokens + outputTokens;
-
-	const usage = response.usage as { prompt_tokens_details?: { cached_tokens?: number } } | undefined;
-	const cachedInputTokens = usage?.prompt_tokens_details?.cached_tokens ?? 0;
-
-	let costUsd = getTextLlmCost(env.OPENAI_MODEL, inputTokens, outputTokens, cachedInputTokens);
-	if (costUsd === 0 && totalTokens > 0) {
-		costUsd =
-			(inputTokens / 1_000_000) * Number.parseFloat(env.OPENAI_INPUT_COST_PER_1M) +
-			(outputTokens / 1_000_000) * Number.parseFloat(env.OPENAI_OUTPUT_COST_PER_1M);
-	}
-
-	return {
-		content: choice.message.content || '',
-		tokensUsed: totalTokens,
-		costUsd,
-	};
 }
 
 export { SYSTEM_PROMPT };

@@ -1,4 +1,6 @@
+import { env } from '@common/config/env';
 import { DEVICE_ID_HEADER } from '@common/utils/device-id';
+import { getClientIP } from '@common/utils/request-ip';
 import { Elysia, t } from 'elysia';
 import * as service from './service';
 import * as streamService from '@modules/voice-chat/stream-service';
@@ -6,14 +8,6 @@ import * as streamService from '@modules/voice-chat/stream-service';
 const SUPPORTED_LANGUAGE_CODES = new Set([
 	'en', 'es', 'zh', 'fr', 'ar', 'de', 'ja', 'pt', 'ko', 'hi', 'ur', 'bn',
 ]);
-
-function getClientIP(request: Request): string {
-	return (
-		request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
-		request.headers.get('x-real-ip') ||
-		'127.0.0.1'
-	);
-}
 
 /** Device ID from X-Trial-Device-Id, X-Device-Id (unified with free tier), or body. Same identity can be used for trial and free anonymous. */
 function getTrialDeviceId(
@@ -126,7 +120,9 @@ export const trialModule = new Elysia({ prefix: '/api/trial' })
 		{
 			params: t.Object({ id: t.String() }),
 			body: t.Object({
-				content: t.String(),
+				content: t.String({
+					maxLength: env.CHAT_MESSAGE_MAX_CHARS ?? 4096,
+				}),
 				trial_device_id: t.Optional(t.String()),
 			}),
 			detail: {
