@@ -176,7 +176,7 @@ const EnvSchema = Type.Object({
 	}),
 	VOICE_WS_TOKEN_EXPIRY_SEC: Type.Number({
 		description: 'Voice WebSocket token expiry in seconds',
-		default: 300,
+		default: 30000,
 	}),
 
 	// OpenAI (for paid AI chat)

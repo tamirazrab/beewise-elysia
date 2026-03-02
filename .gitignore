@@ -93,3 +93,7 @@ service-account.json
 package-lock.json
 yarn.lock
 pnpm-lock.yaml
+
+postman/*.json
+
+aws-bedrock-example

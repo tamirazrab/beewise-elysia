@@ -202,6 +202,7 @@ export const voiceChatModule = withOptionalAuth(new Elysia({ prefix: '/api/voice
           languageCode,
           onOutput: (event) => {
             try {
+              // Send structured event: { type, data } for client to distinguish event types
               ws.send(JSON.stringify(event));
             } catch (err) {
               // Client may have disconnected
@@ -209,7 +210,7 @@ export const voiceChatModule = withOptionalAuth(new Elysia({ prefix: '/api/voice
           },
           onError: (err) => {
             try {
-              ws.send(JSON.stringify({ error: err.message }));
+              ws.send(JSON.stringify({ type: 'error', data: { message: err.message } }));
             } catch { }
           },
           onEnd: () => {
