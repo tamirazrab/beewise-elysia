@@ -5,27 +5,30 @@ import {
 	practiceSession,
 	practiceRecording,
 	quizAttempt,
+	userSpeakPracticeCompletion,
 	anonymousVocabularyProgress,
 	anonymousFavoriteItem,
 	anonymousPracticeSession,
 	anonymousPracticeRecording,
 	anonymousQuizAttempt,
+	anonymousSpeakPracticeCompletion,
 } from '@common/db/schema';
 import { eq, and, inArray } from 'drizzle-orm';
 
 /**
- * Migrate anonymous (device-id) vocabulary data to a newly linked user.
+ * Migrate anonymous (device-id) vocabulary and speak-practice data to a newly linked user.
  * Call after setting user.linkedAnonymousIdHash.
  * Idempotent: safe to call multiple times (skips or merges duplicates).
  */
 export async function migrateAnonymousDataToUser(
 	anonymousIdHash: string,
 	userId: string,
-): Promise<{ progress: number; favorites: number; practiceSessions: number; quizAttempts: number }> {
+): Promise<{ progress: number; favorites: number; practiceSessions: number; quizAttempts: number; speakPracticeCompletions: number }> {
 	let progress = 0;
 	let favorites = 0;
 	let practiceSessions = 0;
 	let quizAttempts = 0;
+	let speakPracticeCompletions = 0;
 
 	// Vocabulary progress: merge by max mastery
 	const anonProgress = await db
@@ -160,5 +163,32 @@ export async function migrateAnonymousDataToUser(
 		quizAttempts++;
 	}
 
-	return { progress, favorites, practiceSessions, quizAttempts };
+	// Speak-practice completions: copy to user, skip if user already has that sentence
+	const anonSpeak = await db
+		.select()
+		.from(anonymousSpeakPracticeCompletion)
+		.where(eq(anonymousSpeakPracticeCompletion.anonymousIdHash, anonymousIdHash));
+
+	for (const row of anonSpeak) {
+		const [existing] = await db
+			.select()
+			.from(userSpeakPracticeCompletion)
+			.where(
+				and(
+					eq(userSpeakPracticeCompletion.userId, userId),
+					eq(userSpeakPracticeCompletion.sentenceId, row.sentenceId),
+				),
+			)
+			.limit(1);
+		if (!existing) {
+			await db.insert(userSpeakPracticeCompletion).values({
+				userId,
+				sentenceId: row.sentenceId,
+				completedAt: row.completedAt,
+			});
+			speakPracticeCompletions++;
+		}
+	}
+
+	return { progress, favorites, practiceSessions, quizAttempts, speakPracticeCompletions };
 }

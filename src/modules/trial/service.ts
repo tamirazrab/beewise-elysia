@@ -12,9 +12,7 @@ import { env } from '@common/config/env';
 import { appLogger } from '@common/logger';
 import { eq, and, desc, sql, gte } from 'drizzle-orm';
 import { estimateTokenCountSync, invokeBedrockChat } from '@common/llm/bedrock';
-
-const TRIAL_SYSTEM_PROMPT =
-	'You are a helpful language learning assistant. Keep responses concise and encouraging. Help the user practice the language.';
+import { buildSystemPrompt, buildVoiceSystemPrompt } from '@modules/free-ai-chat/service';
 
 export function hashTrialDeviceId(deviceId: string): string {
 	return createHash('sha256').update(deviceId.trim()).digest('hex');
@@ -229,8 +227,8 @@ export async function sendTrialChatMessage(
 		...history.map((m) => ({ role: m.role, content: m.content })),
 		{ role: 'user' as const, content: userContent },
 	];
-
-	const response = await invokeBedrockChat(messages, TRIAL_SYSTEM_PROMPT);
+	const systemPrompt = buildVoiceSystemPrompt(session.languageCode);
+	const response = await invokeBedrockChat(messages, systemPrompt);
 
 	await addTrialMessage(sessionId, 'user', userContent, userTokens);
 	await addTrialMessage(sessionId, 'assistant', response.content, response.tokensUsed - userTokens);
@@ -318,7 +316,8 @@ export async function sendFreeAnonymousChatMessage(
 		...history.map((m) => ({ role: m.role, content: m.content })),
 		{ role: 'user' as const, content: userContent },
 	];
-	const response = await invokeBedrockChat(messages, TRIAL_SYSTEM_PROMPT);
+	const systemPrompt = buildSystemPrompt(session.languageCode);
+	const response = await invokeBedrockChat(messages, systemPrompt);
 
 	await addTrialMessage(sessionId, 'user', userContent, userTokens);
 	await addTrialMessage(sessionId, 'assistant', response.content, response.tokensUsed - userTokens);

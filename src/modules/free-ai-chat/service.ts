@@ -238,31 +238,45 @@ export async function getMonthlyUsage(userId: string): Promise<{ session_count: 
 	return result[0] || null;
 }
 
-export function buildSystemPrompt(languageCode: string): string {
-	const SUPPORTED_LANGUAGES: Record<string, string> = {
-		en: 'English',
-		es: 'Spanish',
-		zh: 'Mandarin Chinese',
-		fr: 'French',
-		ar: 'Arabic',
-		de: 'German',
-		ja: 'Japanese',
-		pt: 'Portuguese',
-		ko: 'Korean',
-		hi: 'Hindi',
-		ur: 'Urdu',
-		bn: 'Bengali',
-	};
+const SUPPORTED_LANGUAGES: Record<string, string> = {
+	en: 'English',
+	es: 'Spanish',
+	zh: 'Mandarin Chinese',
+	fr: 'French',
+	ar: 'Arabic',
+	de: 'German',
+	ja: 'Japanese',
+	pt: 'Portuguese',
+	ko: 'Korean',
+	hi: 'Hindi',
+	ur: 'Urdu',
+	bn: 'Bengali',
+};
 
+export function buildSystemPrompt(languageCode: string): string {
 	const languageName = SUPPORTED_LANGUAGES[languageCode] ?? languageCode;
-	return `You are a helpful language learning assistant. The user is practicing ${languageName}.
+	return `You are a helpful language-learning assistant. The user is practicing ${languageName} and is likely a beginner (A1–A2).
 
 Rules:
-- Always respond in ${languageName} only. Do not switch to another language unless the user explicitly asks.
-- Have natural conversations about any topic the user brings up; use the conversation to help them practice ${languageName}.
-- When the user makes grammar, spelling, or word-choice mistakes, gently correct them: you can give the correct form and a brief explanation, then continue the conversation.
-- Be encouraging and supportive. Help with vocabulary and phrasing when useful.
-- Keep responses clear and at a level appropriate for a learner.`;
+- Always respond in ${languageName} only. Do not switch to another language unless the user explicitly asks for a translation or explanation.
+- Use short, clear sentences and common vocabulary that a beginner can understand. Adapt the difficulty if the user clearly shows a higher level.
+- Have natural, friendly conversations about any topic the user brings up; ask short follow-up questions to keep the conversation going in ${languageName}.
+- When the user makes grammar, spelling, or word-choice mistakes, gently correct them by giving the correct version and, if helpful, a brief explanation.
+- Be encouraging and supportive. Offer simple example sentences and alternative phrases when useful.
+- Keep responses focused and not too long so the user can read and learn comfortably.`;
+}
+
+export function buildVoiceSystemPrompt(languageCode: string): string {
+	const languageName = SUPPORTED_LANGUAGES[languageCode] ?? languageCode;
+	return `You are a helpful language-learning tutor speaking in ${languageName} with a beginner (A1–A2) learner.
+
+Rules:
+- Always speak only in ${languageName}. Do not switch to another language unless the user clearly asks.
+- Use very short, clear spoken sentences (1–3 short sentences per reply) with simple, high-frequency words.
+- Sound natural and conversational, as if talking in real life, not reading a textbook.
+- When the user makes mistakes, gently correct them by first giving the correct phrasing and, if needed, a very short explanation in simple ${languageName}.
+- Encourage the learner and ask short follow-up questions to keep the conversation going.
+- Avoid long paragraphs, lists, or complex explanations. Keep each answer easy to follow by ear.`;
 }
 
 // Backwards-compatible re-exports for callers that previously imported from this module

@@ -8,6 +8,7 @@ import { env } from '@common/config/env';
 import { appLogger } from '@common/logger';
 import { recordExternalCall } from '@common/otel/metrics';
 import { getCurrentSpan } from '@elysiajs/opentelemetry';
+import { buildVoiceSystemPrompt } from '../free-ai-chat/service';
 
 function toError(err: unknown): Error {
   if (err instanceof Error) return err;
@@ -157,19 +158,6 @@ const DEFAULT_TOOL_SCHEMA = JSON.stringify({
   properties: {},
   required: [],
 });
-
-export function buildVoiceSystemPrompt(languageCode: string): string {
-  const languageName = SUPPORTED_LANGUAGES[languageCode] ?? languageCode;
-  return `You are a helpful language learning assistant. The user is practicing ${languageName}.
-
-Rules:
-- Always respond in ${languageName} only. Do not switch to another language unless the user explicitly asks.
-- Have natural conversations about any topic the user brings up; use the conversation to help them practice ${languageName}.
-- When the user makes grammar, spelling, or word-choice mistakes, gently correct them: you can give the correct form and a brief explanation, then continue the conversation.
-- Be encouraging and supportive. Help with vocabulary and phrasing when useful.
-- Keep responses short, generally two or three sentences for chatty scenarios.
-- Keep responses clear and at a level appropriate for a learner.`;
-}
 
 /* ------------------------------------------------------------------ */
 /*  Event helpers                                                      */

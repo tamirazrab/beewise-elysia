@@ -214,10 +214,10 @@ export const vocabularyModule = withAdmin(
     },
   )
 
-  // GET /api/vocabulary/random - Get single vocabulary item at random
+  // GET /api/vocabulary/random - Get single vocabulary item at random (excludes completed when user/device identified)
   .get(
     '/random',
-    async ({ query, set }: any) => {
+    async ({ query, set, user, anonymousIdHash }: any) => {
       const conditions = [isNull(vocabularyItem.deletedAt)];
       if (query.languageCode) {
         conditions.push(eq(vocabularyItem.languageCode, query.languageCode));
@@ -225,6 +225,55 @@ export const vocabularyModule = withAdmin(
       if (query.difficultyLevel) {
         conditions.push(eq(vocabularyItem.difficultyLevel, query.difficultyLevel));
       }
+
+      // When identified: exclude items already completed (masteryLevel >= 100)
+      const notCompleted = user
+        ? or(isNull(userVocabularyProgress.vocabularyId), lt(userVocabularyProgress.masteryLevel, 100))
+        : anonymousIdHash
+          ? or(isNull(anonymousVocabularyProgress.vocabularyId), lt(anonymousVocabularyProgress.masteryLevel, 100))
+          : null;
+
+      if (user && notCompleted) {
+        const [row] = await db
+          .select({ data: vocabularyItem })
+          .from(vocabularyItem)
+          .leftJoin(
+            userVocabularyProgress,
+            and(
+              eq(vocabularyItem.id, userVocabularyProgress.vocabularyId),
+              eq(userVocabularyProgress.userId, user.id),
+            ),
+          )
+          .where(and(...conditions, notCompleted))
+          .orderBy(sql`random()`)
+          .limit(1);
+        if (!row?.data) {
+          set.status = 404;
+          return { error: 'Not Found', message: 'No vocabulary item found matching filters or all have been completed' };
+        }
+        return { data: row.data };
+      }
+      if (anonymousIdHash && notCompleted) {
+        const [row] = await db
+          .select({ data: vocabularyItem })
+          .from(vocabularyItem)
+          .leftJoin(
+            anonymousVocabularyProgress,
+            and(
+              eq(vocabularyItem.id, anonymousVocabularyProgress.vocabularyId),
+              eq(anonymousVocabularyProgress.anonymousIdHash, anonymousIdHash),
+            ),
+          )
+          .where(and(...conditions, notCompleted))
+          .orderBy(sql`random()`)
+          .limit(1);
+        if (!row?.data) {
+          set.status = 404;
+          return { error: 'Not Found', message: 'No vocabulary item found matching filters or all have been completed' };
+        }
+        return { data: row.data };
+      }
+
       const [item] = await db
         .select()
         .from(vocabularyItem)
@@ -245,7 +294,8 @@ export const vocabularyModule = withAdmin(
       detail: {
         tags: ['Vocabulary'],
         summary: 'Get random vocabulary item',
-        description: 'Get a single vocabulary item at random, optionally filtered by language and difficulty',
+        description:
+          'Get a single vocabulary item at random. When authenticated or X-Device-Id sent, excludes items already completed (mastery ≥ 100). Optional filters: language and difficulty level (beginner → advanced).',
       },
     },
   )
